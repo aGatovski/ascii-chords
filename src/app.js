@@ -355,6 +355,20 @@
   // -------- Editor view --------
   let _editorState = null;
 
+  // Draft persistence — keeps the unsaved new song in sessionStorage so
+  // navigating away and back does not lose typed content.
+  const DRAFT_KEY = 'asciichords:draft:new';
+  function readDraft() {
+    try { return JSON.parse(sessionStorage.getItem(DRAFT_KEY) || 'null'); }
+    catch (e) { return null; }
+  }
+  function writeDraft(data) {
+    try { sessionStorage.setItem(DRAFT_KEY, JSON.stringify(data)); } catch (e) {}
+  }
+  function clearDraft() {
+    try { sessionStorage.removeItem(DRAFT_KEY); } catch (e) {}
+  }
+
   async function viewEditor(songId, opts = {}) {
     const root = document.getElementById('view-root');
     root.innerHTML = '';
@@ -373,6 +387,13 @@
         const data = await API.getSong(songId);
         song = data.song;
       } catch (e) { toast(e.message, 'error'); window.location.hash = '#library'; return; }
+    } else {
+      // New-song view: restore unsaved draft if present
+      const draft = readDraft();
+      if (draft) {
+        song = Object.assign(song, draft);
+        toast('Restored unsaved draft', '');
+      }
     }
     _editorState = { song, semitones: 0, useFlats: false, readOnly: !!opts.readOnly };
 
@@ -395,6 +416,26 @@
     }
     ta.addEventListener('input', scheduleRender);
     rerender();
+
+    // Persist draft on every change while editing an unsaved new song.
+    if (!_editorState.song.id && !opts.readOnly) {
+      let draftTimer;
+      const persist = () => {
+        clearTimeout(draftTimer);
+        draftTimer = setTimeout(() => writeDraft(readMetaForm()), 200);
+      };
+      ta.addEventListener('input', persist);
+      [
+        'meta-title','meta-artist','meta-album','meta-year','meta-key','meta-capo',
+        'meta-tuning','meta-bpm','meta-difficulty','meta-genre','meta-tags','meta-notes',
+      ].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) {
+          el.addEventListener('input', persist);
+          el.addEventListener('change', persist);
+        }
+      });
+    }
 
     // Wire toolbar
     wireToolbar(rerender);
@@ -529,6 +570,7 @@
         result = await API.createSong(data);
       }
       _editorState.song = result.song;
+      clearDraft();
       status.textContent = 'Saved.';
       toast('Saved', 'success');
       // Update hash for new songs
@@ -549,6 +591,13 @@
 
   async function deleteCurrentSong() {
     if (!_editorState.song.id) {
+      // New-song view: treat Delete as "discard draft"
+      const draft = readDraft();
+      if (draft) {
+        if (!confirm('Discard the unsaved draft?')) return;
+        clearDraft();
+        toast('Draft discarded', '');
+      }
       window.location.hash = '#library';
       return;
     }
