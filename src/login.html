@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ASCII Chords — Login</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body class="auth-body">
+  <main class="auth-card">
+    <h1>🎸 ASCII Chords</h1>
+    <p class="muted">Sign in or create an account to manage your songs.</p>
+
+    <div class="tabs">
+      <button class="tab-btn active" data-tab="login">Sign in</button>
+      <button class="tab-btn" data-tab="register">Create account</button>
+    </div>
+
+    <form id="login-form" class="auth-form" autocomplete="on">
+      <label>
+        Username
+        <input type="text" name="username" required autocomplete="username" />
+      </label>
+      <label>
+        Password
+        <input type="password" name="password" required autocomplete="current-password" />
+      </label>
+      <button type="submit" class="primary">Sign in</button>
+      <p class="error" data-error></p>
+    </form>
+
+    <form id="register-form" class="auth-form hidden" autocomplete="on">
+      <label>
+        Username
+        <input type="text" name="username" required autocomplete="username" minlength="1" maxlength="50" />
+      </label>
+      <label>
+        Password
+        <input type="password" name="password" required autocomplete="new-password" minlength="6" />
+      </label>
+      <button type="submit" class="primary">Create account</button>
+      <p class="error" data-error></p>
+    </form>
+  </main>
+
+  <script>
+    const tabs = document.querySelectorAll('.tab-btn');
+    const loginForm = document.getElementById('login-form');
+    const registerForm = document.getElementById('register-form');
+    tabs.forEach(b => b.addEventListener('click', () => {
+      tabs.forEach(x => x.classList.toggle('active', x === b));
+      const which = b.dataset.tab;
+      loginForm.classList.toggle('hidden', which !== 'login');
+      registerForm.classList.toggle('hidden', which !== 'register');
+    }));
+
+    async function getCsrf() {
+      const r = await fetch('/api/csrf', { credentials: 'same-origin' });
+      const j = await r.json();
+      return j.token;
+    }
+
+    async function submitAuth(form, action) {
+      const errEl = form.querySelector('[data-error]');
+      errEl.textContent = '';
+      const fd = new FormData(form);
+      const csrf = await getCsrf();
+      try {
+        const r = await fetch('/api/auth/' + action, {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': csrf },
+          body: JSON.stringify({
+            username: fd.get('username'),
+            password: fd.get('password'),
+          }),
+        });
+        const j = await r.json();
+        if (!r.ok) { errEl.textContent = j.error || 'Failed'; return; }
+        window.location.href = 'index.html';
+      } catch (e) {
+        errEl.textContent = e.message;
+      }
+    }
+
+    loginForm.addEventListener('submit', e => { e.preventDefault(); submitAuth(loginForm, 'login'); });
+    registerForm.addEventListener('submit', e => { e.preventDefault(); submitAuth(registerForm, 'register'); });
+  </script>
+</body>
+</html>

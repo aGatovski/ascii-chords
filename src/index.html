@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ASCII Chords</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <header class="topbar no-print">
+    <div class="brand">
+      <a href="#library">🎸 ASCII Chords</a>
+    </div>
+    <nav>
+      <a href="#library">Library</a>
+      <a href="#song/new">+ New song</a>
+      <a href="#chords">Chord dictionary</a>
+    </nav>
+    <div class="user-menu">
+      <span id="user-label" class="muted"></span>
+      <button id="logout-btn" class="link-btn">Sign out</button>
+    </div>
+  </header>
+
+  <main id="view-root" class="container"></main>
+
+  <!-- Hidden popover host -->
+  <div id="chord-popover" class="popover hidden"></div>
+
+  <!-- Toast host -->
+  <div id="toast" class="toast hidden"></div>
+
+  <!-- Templates -->
+  <template id="tpl-library">
+    <section class="library-view">
+      <header class="library-header">
+        <h2>Your songs</h2>
+        <div class="library-controls">
+          <input type="search" id="lib-search" placeholder="Search title or artist…" />
+          <select id="lib-difficulty">
+            <option value="">All difficulties</option>
+            <option>Beginner</option>
+            <option>Intermediate</option>
+            <option>Advanced</option>
+          </select>
+          <select id="lib-sort">
+            <option value="updated_desc">Recently updated</option>
+            <option value="updated_asc">Oldest updated</option>
+            <option value="title_asc">Title A–Z</option>
+            <option value="artist_asc">Artist A–Z</option>
+            <option value="difficulty">By difficulty</option>
+          </select>
+          <a class="primary" href="#song/new">+ New song</a>
+        </div>
+      </header>
+      <div id="lib-list" class="card-grid"></div>
+      <p id="lib-empty" class="muted hidden">No songs yet. Click <b>+ New song</b> to start.</p>
+    </section>
+  </template>
+
+  <template id="tpl-editor">
+    <section class="editor-view">
+      <header class="editor-meta-bar">
+        <input type="text" id="meta-title"  placeholder="Song title"  class="big" />
+        <input type="text" id="meta-artist" placeholder="Artist"      class="big" />
+      </header>
+      <div class="editor-meta-grid">
+        <label>Album <input type="text" id="meta-album" /></label>
+        <label>Year  <input type="number" id="meta-year" min="1900" max="2099" /></label>
+        <label>Key   <input type="text" id="meta-key" placeholder="e.g. F#m" /></label>
+        <label>Capo  <input type="number" id="meta-capo" min="0" max="12" value="0" /></label>
+        <label>Tuning
+          <select id="meta-tuning">
+            <option>Standard</option><option>Drop D</option><option>Open G</option>
+            <option>Open D</option><option>DADGAD</option><option>Half-Step Down</option>
+          </select>
+        </label>
+        <label>Tempo (BPM)
+          <input type="number" id="meta-bpm" min="40" max="240" value="120" />
+        </label>
+        <label>Difficulty
+          <select id="meta-difficulty">
+            <option>Beginner</option><option selected>Intermediate</option><option>Advanced</option>
+          </select>
+        </label>
+        <label>Genre  <input type="text" id="meta-genre" /></label>
+        <label class="full">Tags (comma separated)
+          <input type="text" id="meta-tags" placeholder="classic-rock, blues" />
+        </label>
+        <label class="full">Notes
+          <textarea id="meta-notes" rows="2"></textarea>
+        </label>
+      </div>
+
+      <div class="editor-split">
+        <textarea id="raw-editor" spellcheck="false"
+                  placeholder="[Verse]&#10;&#10;C       G       Am      F&#10;Type your lyrics here&#10;&#10;e|--0--2--3--|&#10;B|--1--3--3--|&#10;G|--0--2--0--|&#10;D|--2--0--0--|&#10;A|--3--x--2--|&#10;E|--x--x--3--|"></textarea>
+        <div id="preview" class="preview"></div>
+      </div>
+
+      <footer class="editor-toolbar">
+        <div class="toolbar-row">
+          <button id="play-btn"  class="primary">▶ Play</button>
+          <button id="pause-btn">⏸ Pause</button>
+          <button id="stop-btn">⏹ Stop</button>
+          <label>BPM <input type="range" id="bpm-slider" min="40" max="240" value="120" /></label>
+          <span id="bpm-display">120</span>
+          <label><input type="checkbox" id="metronome-toggle" /> Metronome</label>
+        </div>
+        <div class="toolbar-row">
+          <button id="autoscroll-btn">↕ Autoscroll</button>
+          <label>Speed <input type="range" id="autoscroll-speed" min="0.1" max="3.0" value="0.5" step="0.1" /></label>
+          <span id="autoscroll-display">0.5×</span>
+          <button id="transpose-down">– Transpose</button>
+          <button id="transpose-up">Transpose +</button>
+          <select id="accidental-select">
+            <option value="sharp">♯ sharps</option>
+            <option value="flat">♭ flats</option>
+          </select>
+          <span class="muted" id="capo-info"></span>
+        </div>
+        <div class="toolbar-row">
+          <button id="save-btn"   class="primary">💾 Save</button>
+          <button id="export-json-btn">⬇ Export JSON</button>
+          <button id="export-txt-btn">⬇ Export TXT</button>
+          <button id="print-btn">🖨 Print</button>
+          <button id="delete-btn" class="danger">🗑 Delete</button>
+          <span class="muted" id="save-status"></span>
+        </div>
+      </footer>
+    </section>
+  </template>
+
+  <template id="tpl-chords-dict">
+    <section class="chords-dict-view">
+      <header><h2>Chord dictionary</h2>
+        <input type="search" id="chord-search" placeholder="Search chord names…" />
+      </header>
+      <div id="chord-grid" class="chord-grid"></div>
+    </section>
+  </template>
+
+  <script src="chords.js"></script>
+  <script src="player.js"></script>
+  <script src="autoscroll.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

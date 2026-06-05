@@ -1,0 +1,35 @@
+version: '3.9'
+
+services:
+  web:
+    build: .
+    container_name: ascii_chords_web
+    ports:
+      - "8080:80"
+    environment:
+      DB_HOST: db
+      DB_NAME: ascii_chords_db
+      DB_USER: chords_user
+      DB_PASS: chords_pass
+    depends_on:
+      - db
+    volumes:
+      - ./src:/var/www/html
+
+  db:
+    image: mysql:8.0
+    container_name: ascii_chords_db
+    restart: always
+    environment:
+      MYSQL_DATABASE: ascii_chords_db
+      MYSQL_USER: chords_user
+      MYSQL_PASSWORD: chords_pass
+      MYSQL_ROOT_PASSWORD: rootsecret
+    ports:
+      - "3307:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+      - ./db-init:/docker-entrypoint-initdb.d:ro
+
+volumes:
+  db_data:

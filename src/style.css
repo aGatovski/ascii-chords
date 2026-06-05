@@ -1,0 +1,433 @@
+/* ============================================================
+   ASCII Chords — global styling
+   ============================================================ */
+
+:root {
+  --bg: #0f1115;
+  --panel: #161922;
+  --panel-2: #1d212c;
+  --border: #2a2f3d;
+  --text: #e8e9ee;
+  --muted: #8a93a6;
+  --accent: #f5a524;
+  --accent-2: #ffd166;
+  --danger: #ef4444;
+  --success: #22c55e;
+  --chord: #6ea8fe;
+  --section: #f59e0b;
+  --beat: rgba(245, 165, 36, 0.25);
+  --mono: 'JetBrains Mono', 'Courier New', Courier, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+a { color: var(--accent-2); text-decoration: none; }
+a:hover { text-decoration: underline; }
+
+button, .primary {
+  background: var(--panel-2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 0.45em 0.9em;
+  border-radius: 6px;
+  cursor: pointer;
+  font: inherit;
+}
+button:hover { background: #262b38; }
+button.primary, a.primary {
+  background: var(--accent);
+  color: #1a1300;
+  border-color: var(--accent);
+  font-weight: 600;
+  display: inline-block;
+}
+button.primary:hover, a.primary:hover { background: var(--accent-2); }
+button.danger { background: var(--danger); color: white; border-color: var(--danger); }
+button.danger:hover { background: #dc2626; }
+.link-btn {
+  background: transparent;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  padding: 0.25em 0.5em;
+}
+.link-btn:hover { color: var(--text); text-decoration: underline; }
+
+input, select, textarea {
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 0.4em 0.6em;
+  border-radius: 6px;
+  font: inherit;
+}
+input:focus, select:focus, textarea:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 0;
+}
+.hidden { display: none !important; }
+.muted { color: var(--muted); font-size: 0.9em; }
+.error { color: var(--danger); min-height: 1.2em; }
+
+/* ============================================================
+   Top bar
+   ============================================================ */
+.topbar {
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  padding: 0.6rem 1.2rem;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+.topbar .brand a {
+  font-weight: 700;
+  color: var(--accent-2);
+  font-size: 1.05rem;
+}
+.topbar nav {
+  display: flex;
+  gap: 1rem;
+  flex: 1;
+}
+.topbar nav a { color: var(--text); }
+.topbar .user-menu { display: flex; align-items: center; gap: 0.5rem; }
+
+.container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 1rem 1.2rem 2rem;
+}
+
+/* ============================================================
+   Auth pages
+   ============================================================ */
+.auth-body {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+}
+.auth-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 2rem;
+  max-width: 380px;
+  width: 100%;
+}
+.auth-card h1 { margin-top: 0; }
+.tabs {
+  display: flex;
+  gap: 0.5rem;
+  margin: 1rem 0;
+}
+.tab-btn {
+  flex: 1;
+  background: var(--panel-2);
+  border-bottom: 2px solid transparent;
+}
+.tab-btn.active {
+  border-bottom-color: var(--accent);
+  color: var(--accent-2);
+}
+.auth-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+.auth-form label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-size: 0.9em;
+  color: var(--muted);
+}
+.auth-form input { font-size: 1rem; }
+
+/* ============================================================
+   Library view
+   ============================================================ */
+.library-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+.library-controls {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+.card-grid {
+  display: grid;
+  gap: 0.9rem;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+}
+.song-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+.song-card h3 { margin: 0; }
+.song-card .meta-row { color: var(--muted); font-size: 0.85em; }
+.song-card .badges { display: flex; flex-wrap: wrap; gap: 0.3rem; }
+.badge {
+  display: inline-block;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  padding: 0.1em 0.5em;
+  border-radius: 999px;
+  font-size: 0.75em;
+}
+.badge.diff-Beginner    { color: #34d399; border-color: #14532d; }
+.badge.diff-Intermediate{ color: #fbbf24; border-color: #78350f; }
+.badge.diff-Advanced    { color: #f87171; border-color: #7f1d1d; }
+.song-card .actions {
+  display: flex;
+  gap: 0.3rem;
+  margin-top: auto;
+  flex-wrap: wrap;
+}
+.song-card .actions button { font-size: 0.85em; padding: 0.3em 0.6em; }
+
+/* ============================================================
+   Editor view
+   ============================================================ */
+.editor-view {
+  display: flex;
+  flex-direction: column;
+  gap: 0.8rem;
+}
+.editor-meta-bar {
+  display: flex;
+  gap: 0.6rem;
+}
+.editor-meta-bar .big {
+  flex: 1;
+  font-size: 1.2rem;
+  font-weight: 600;
+}
+.editor-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 0.6rem;
+}
+.editor-meta-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8em;
+  color: var(--muted);
+}
+.editor-meta-grid label.full { grid-column: 1 / -1; }
+
+.editor-split {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.8rem;
+  min-height: 60vh;
+}
+@media (max-width: 980px) {
+  .editor-split { grid-template-columns: 1fr; }
+}
+
+#raw-editor, .preview {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.8rem;
+  font-family: var(--mono);
+  font-size: 14px;
+  line-height: 1.5;
+  white-space: pre;
+  overflow: auto;
+  min-height: 60vh;
+  max-height: 70vh;
+}
+#raw-editor { resize: vertical; color: var(--text); }
+.preview { white-space: normal; }
+
+/* Preview content elements */
+.preview .section-label {
+  color: var(--section);
+  margin: 0.6em 0 0.2em;
+  font-family: var(--mono);
+  font-size: 1em;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+.preview .chord-lyric-pair {
+  font-family: var(--mono);
+  white-space: pre;
+  margin: 0.05em 0;
+}
+.preview .chord-row {
+  color: var(--chord);
+  font-weight: 700;
+}
+.preview .chord-token {
+  cursor: pointer;
+  border-bottom: 1px dotted var(--chord);
+}
+.preview .chord-token:hover {
+  background: rgba(110, 168, 254, 0.15);
+}
+.preview .lyric-row { color: var(--text); }
+.preview .lyric { font-family: var(--mono); white-space: pre; }
+.preview .tab-block {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  padding: 0.6rem 0.8rem;
+  border-radius: 6px;
+  white-space: pre;
+  overflow-x: auto;
+  font-family: var(--mono);
+  margin: 0.5em 0;
+}
+.preview .tab-block.beat-active .col-active {
+  background: var(--beat);
+}
+.preview .br { display: block; height: 0.8em; }
+
+/* ============================================================
+   Toolbar
+   ============================================================ */
+.editor-toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.7rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.toolbar-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+}
+.toolbar-row label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+/* ============================================================
+   Chord popover
+   ============================================================ */
+.popover {
+  position: absolute;
+  z-index: 200;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.8rem;
+  min-width: 220px;
+  font-family: var(--mono);
+  font-size: 13px;
+  white-space: pre;
+  box-shadow: 0 12px 30px rgba(0,0,0,0.5);
+}
+.popover .popover-title {
+  font-weight: 700;
+  color: var(--accent-2);
+  font-family: -apple-system, sans-serif;
+  margin-bottom: 0.3rem;
+}
+.popover .popover-actions {
+  margin-top: 0.6rem;
+  display: flex;
+  gap: 0.3rem;
+  flex-wrap: wrap;
+  font-family: -apple-system, sans-serif;
+}
+
+/* ============================================================
+   Chord dictionary
+   ============================================================ */
+.chord-grid {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+}
+.chord-card {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.8rem;
+  font-family: var(--mono);
+  white-space: pre;
+}
+.chord-card-name {
+  font-family: -apple-system, sans-serif;
+  font-weight: 700;
+  margin-bottom: 0.3rem;
+  color: var(--accent-2);
+}
+
+/* ============================================================
+   Toast
+   ============================================================ */
+.toast {
+  position: fixed;
+  bottom: 1.5rem;
+  right: 1.5rem;
+  background: var(--panel);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--accent);
+  padding: 0.7rem 1.2rem;
+  border-radius: 6px;
+  z-index: 300;
+  box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+  animation: toast-in 0.2s ease-out;
+}
+.toast.error { border-left-color: var(--danger); }
+.toast.success { border-left-color: var(--success); }
+@keyframes toast-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================================================
+   Print
+   ============================================================ */
+@media print {
+  body { background: white; color: black; }
+  .no-print, .editor-toolbar, .editor-meta-bar, .editor-meta-grid,
+  #raw-editor, .topbar, #toast, #chord-popover { display: none !important; }
+  .container { max-width: none; padding: 0; }
+  .editor-split { grid-template-columns: 1fr; }
+  .preview {
+    background: white;
+    border: none;
+    color: black;
+    max-height: none;
+    min-height: auto;
+    overflow: visible;
+  }
+  .preview .section-label { color: #b45309; }
+  .preview .chord-row { color: #1d4ed8; }
+  .preview .tab-block { background: #f5f5f5; color: black; border: 1px solid #ddd; }
+}
