@@ -201,7 +201,7 @@ window.Player = (function () {
         const m = body.substring(col).match(/^(\d{1,2})/);
         if (m) {
           const fret = parseInt(m[1], 10);
-          playNote(audioCtx, letters[s], fret, time + s * 0.004, 0.2);
+          playNote(audioCtx, letters[s], fret, time, 0.2);
         }
       }
       col += 1;
@@ -229,8 +229,8 @@ window.Player = (function () {
           const fret = def.frets[s];
           if (fret < 0) continue;
           const stringName = SAMPLE_ORDER[s];   // E,A,D,G,B,e
-          // Strum: 8 ms between strings, low-to-high
-          playNote(audioCtx, stringName, fret, time + s * 0.008, 0.15);
+          // All 6 strings ring out together (block chord, not strummed)
+          playNote(audioCtx, stringName, fret, time, 0.15);
         }
       }
       if (metronomeOn) metronomeTick(audioCtx, time, false);
