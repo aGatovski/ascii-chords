@@ -30,9 +30,11 @@ CREATE TABLE IF NOT EXISTS songs (
     strumming    VARCHAR(100) DEFAULT NULL,
     notes        TEXT         DEFAULT NULL,
     body         LONGTEXT     NOT NULL,
+    is_public    TINYINT(1)   NOT NULL DEFAULT 0,
     created_at   TIMESTAMP    DEFAULT CURRENT_TIMESTAMP,
     updated_at   TIMESTAMP    DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+    INDEX idx_is_public (is_public)
 ) ENGINE=InnoDB;
 
 -- 3. Chord library
@@ -105,3 +107,26 @@ INSERT IGNORE INTO chord_library (user_id, chord_name, variant, frets, fingers, 
 INSERT IGNORE INTO tags (name) VALUES
 ('classic-rock'), ('blues'), ('folk'), ('acoustic'),
 ('fingerpicking'), ('beginner'), ('strumming'), ('pop');
+
+-- ---------------------------------------------------------------------------
+-- Idempotent migration for installs created before is_public was introduced.
+-- Wrapped in a procedure so it is safe to run on a brand-new schema too:
+-- INFORMATION_SCHEMA tells us whether the column already exists.
+-- ---------------------------------------------------------------------------
+DROP PROCEDURE IF EXISTS add_is_public_if_missing;
+DELIMITER //
+CREATE PROCEDURE add_is_public_if_missing()
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = 'ascii_chords_db'
+          AND TABLE_NAME   = 'songs'
+          AND COLUMN_NAME  = 'is_public'
+    ) THEN
+        ALTER TABLE songs ADD COLUMN is_public TINYINT(1) NOT NULL DEFAULT 0;
+        ALTER TABLE songs ADD INDEX idx_is_public (is_public);
+    END IF;
+END //
+DELIMITER ;
+CALL add_is_public_if_missing();
+DROP PROCEDURE add_is_public_if_missing;

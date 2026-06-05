@@ -14,7 +14,9 @@
     <nav>
       <a href="#library">Library</a>
       <a href="#song/new">+ New song</a>
+      <a href="#catalog">Public catalog</a>
       <a href="#chords">Chord dictionary</a>
+      <a href="#help">Help</a>
     </nav>
     <div class="user-menu">
       <span id="user-label" class="muted"></span>
@@ -84,6 +86,10 @@
           </select>
         </label>
         <label>Genre  <input type="text" id="meta-genre" /></label>
+        <label class="checkbox">
+          <input type="checkbox" id="meta-is-public" />
+          <span>Make this song public</span>
+        </label>
         <label class="full">Tags (comma separated)
           <input type="text" id="meta-tags" placeholder="classic-rock, blues" />
         </label>
@@ -135,8 +141,127 @@
     <section class="chords-dict-view">
       <header><h2>Chord dictionary</h2>
         <input type="search" id="chord-search" placeholder="Search chord names…" />
+        <button id="chord-builder-toggle" class="primary">+ New chord</button>
       </header>
+
+      <section id="chord-builder" class="chord-builder hidden">
+        <header class="cb-header">
+          <h3>Visual chord builder</h3>
+          <button id="cb-close" class="link-btn">close</button>
+        </header>
+        <div class="cb-grid">
+          <label>Name <input type="text" id="cb-name" maxlength="20" placeholder="e.g. Cadd9" /></label>
+          <label>Variant
+            <select id="cb-variant">
+              <option>1</option><option>2</option><option>3</option>
+              <option>4</option><option>5</option>
+            </select>
+          </label>
+          <label>Barre fret <input type="number" id="cb-barre" min="0" max="12" placeholder="(none)" /></label>
+        </div>
+        <div id="cb-fretboard" class="cb-fretboard" aria-label="Chord fretboard"></div>
+        <p class="muted">Click on a fret to press it. Click the top row to toggle muted (✕) / open (○).
+           Each string can have at most one pressed fret.</p>
+        <div class="cb-actions">
+          <pre id="cb-preview" class="cb-preview"></pre>
+          <div>
+            <button id="cb-save" class="primary">💾 Save chord</button>
+            <button id="cb-reset">Reset</button>
+          </div>
+        </div>
+      </section>
+
       <div id="chord-grid" class="chord-grid"></div>
+    </section>
+  </template>
+
+  <template id="tpl-catalog">
+    <section class="library-view">
+      <header class="library-header">
+        <h2>Public catalog</h2>
+        <div class="library-controls">
+          <input type="search" id="cat-search" placeholder="Search title or artist…" />
+          <select id="cat-difficulty">
+            <option value="">All difficulties</option>
+            <option>Beginner</option>
+            <option>Intermediate</option>
+            <option>Advanced</option>
+          </select>
+          <select id="cat-sort">
+            <option value="updated_desc">Recently updated</option>
+            <option value="title_asc">Title A–Z</option>
+            <option value="artist_asc">Artist A–Z</option>
+            <option value="difficulty">By difficulty</option>
+          </select>
+        </div>
+      </header>
+      <p class="muted">Songs published by other users. Click any to open in read-only view.</p>
+      <div id="cat-list" class="card-grid"></div>
+      <p id="cat-empty" class="muted hidden">No public songs yet.</p>
+    </section>
+  </template>
+
+  <template id="tpl-help">
+    <section class="help-view">
+      <h2>How to read ASCII chords &amp; tabs</h2>
+
+      <p>Songs in ASCII Chords are written as plain text. The parser recognises four
+         kinds of lines, decided by what the line looks like.</p>
+
+      <h3>1. Section headings — <code>[Verse]</code></h3>
+      <p>Wrap a label in square brackets to mark a new section. It will render as a
+         coloured heading. Common labels: <code>[Intro]</code>, <code>[Verse]</code>,
+         <code>[Chorus]</code>, <code>[Bridge]</code>, <code>[Outro]</code>.</p>
+
+      <h3>2. Chord lines</h3>
+      <p>A line that contains <em>only</em> chord names (separated by spaces) is treated
+         as a chord line. Place it directly above the lyric line so the chord aligns
+         above the syllable where it changes.</p>
+<pre>C       G       Am      F
+This is the first line of lyrics.</pre>
+      <p>Click any chord on screen to see its fingering and the notes it contains.
+         Recognised chord shapes: major (<code>C</code>), minor (<code>Am</code>),
+         seventh (<code>G7</code>), maj7 (<code>Cmaj7</code>), suspended
+         (<code>Dsus4</code>), add (<code>Cadd9</code>), slash (<code>D/F#</code>),
+         and any combination of these.</p>
+
+      <h3>3. Tab blocks</h3>
+      <p>Six consecutive lines each beginning with a string letter and a pipe form a
+         tab block. The convention is <strong>top = high e, bottom = low E</strong>.
+         Numbers are fret numbers, <code>x</code> means muted, <code>0</code> means
+         open. Read left-to-right in time:</p>
+<pre>e|--0--0--0--0--|
+B|--1--1--1--1--|
+G|--0--0--0--0--|
+D|--2--2--2--2--|
+A|--3--3--3--3--|
+E|--x--x--x--x--|</pre>
+
+      <h3>4. Lyric lines</h3>
+      <p>Anything that isn't a section heading, chord line, or tab block is treated
+         as lyrics. Empty lines become paragraph breaks.</p>
+
+      <h3>Chord diagrams</h3>
+      <p>The chord popover renders fingerings as a small ASCII grid. Strings are
+         shown <strong>high e on the left, low E on the right</strong>; frets run from
+         top to bottom (lowest fret first). The status row above the grid shows
+         <code>✕</code> for muted, <code>○</code> for open, and a space for fretted.</p>
+
+      <h3>Tunings</h3>
+      <p>Set the song's tuning (Standard, Drop D, Open G, Open D, DADGAD, Half-Step
+         Down) in the metadata grid. The Play button respects it: each string is
+         pitch-shifted so the open strings sound at their correct retuned pitch.</p>
+
+      <h3>Capo &amp; transposition</h3>
+      <p>Capo is informational — it tells the parser what fret to assume for the
+         <em>shape</em> you wrote. Transposition (<code>+ Transpose</code> /
+         <code>– Transpose</code>) actually rewrites every chord and every fret
+         number in tab blocks to a new key.</p>
+
+      <h3>Saving private vs. public</h3>
+      <p>By default every song is private — only you can see it. Tick
+         <strong>Make this song public</strong> in the metadata grid to share it in
+         the public catalog (anyone can read, but only you can edit or delete).</p>
     </section>
   </template>
 

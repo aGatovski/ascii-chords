@@ -30,6 +30,27 @@ window.Player = (function () {
     e: 'sounds/E4.mp3',
   };
 
+  // Tuning presets — semitone offsets per string in SAMPLE_ORDER (low-to-high
+  // E A D G B e). 0 = standard; negative = flatten; positive = sharpen.
+  // Applied additively to the fret number when synthesising/playing notes.
+  const TUNING_PRESETS = {
+    'Standard':       [ 0,  0,  0,  0,  0,  0],
+    'Drop D':         [-2,  0,  0,  0,  0,  0],
+    'Open G':         [-2, -2,  0,  0,  0, -2],
+    'Open D':         [-2,  0,  0, -1, -2, -2],
+    'DADGAD':         [-2,  0,  0,  0, -2, -2],
+    'Half-Step Down': [-1, -1, -1, -1, -1, -1],
+  };
+  // Resolves a tuning name to its offset vector, falling back to Standard.
+  function tuningOffsets(name) {
+    return TUNING_PRESETS[name] || TUNING_PRESETS['Standard'];
+  }
+  // Converts a string letter (E/A/D/G/B/e) into its index in SAMPLE_ORDER.
+  function stringIndex(letter) {
+    const idx = SAMPLE_ORDER.indexOf(letter);
+    return idx >= 0 ? idx : 0;
+  }
+
   let ctx = null;
   let bpm = 120;
   let metronomeOn = false;
@@ -37,6 +58,7 @@ window.Player = (function () {
   let isPlaying = false;
   let isPaused = false;
   let activeBeatTimer = null;
+  let currentTuning = 'Standard';
 
   // ---- Sample cache ------------------------------------------------------
   // buffers[stringLetter] = AudioBuffer | null. Null = synth-only fallback.
@@ -53,7 +75,8 @@ window.Player = (function () {
   function noteFrequency(stringName, fret) {
     const open = STRING_OPEN_FREQ[stringName];
     if (open == null || fret < 0) return null;
-    return open * Math.pow(2, fret / 12);
+    const offset = tuningOffsets(currentTuning)[stringIndex(stringName)];
+    return open * Math.pow(2, (fret + offset) / 12);
   }
 
   // ---- Sample loading ----------------------------------------------------
@@ -86,14 +109,17 @@ window.Player = (function () {
   // ---- Note playback -----------------------------------------------------
   // Plays one note at the given absolute audioContext time.
   // If a sample is loaded for the string, pitch-shifts it; otherwise
-  // falls back to the synth pluck.
+  // falls back to the synth pluck. The active tuning shifts the effective
+  // semitone count so e.g. Drop D plays the low-E string a whole step lower.
   function playNote(audioCtx, stringName, fret, startTime, gain = 0.18) {
+    const offset = tuningOffsets(currentTuning)[stringIndex(stringName)];
+    const effectiveFret = fret + offset;
     const buf = buffers[stringName];
     if (buf) {
       const src = audioCtx.createBufferSource();
       const g   = audioCtx.createGain();
       src.buffer = buf;
-      src.playbackRate.value = Math.pow(2, fret / 12);
+      src.playbackRate.value = Math.pow(2, effectiveFret / 12);
       g.gain.setValueAtTime(gain, startTime);
       // Slight release so cutoff isn't abrupt when notes overlap
       g.gain.setValueAtTime(gain, startTime + 1.5);
@@ -261,8 +287,9 @@ window.Player = (function () {
   }
 
   // ---- Public API --------------------------------------------------------
-  async function play(text, songBpm) {
+  async function play(text, songBpm, songTuning) {
     stop();
+    if (songTuning) currentTuning = songTuning;
     // Ensure samples are loaded before scheduling. The user gesture (Play
     // click) also unblocks the AudioContext, so this is the right moment.
     await loadSamples();
@@ -289,6 +316,7 @@ window.Player = (function () {
   }
 
   function setBpm(v)        { bpm = v; }
+  function setTuning(name)  { currentTuning = name || 'Standard'; }
   function setMetronome(on) {
     metronomeOn = !!on;
     if (!metronomeOn) {
@@ -302,5 +330,5 @@ window.Player = (function () {
     }
   }
 
-  return { play, pause, stop, setBpm, setMetronome, loadSamples };
+  return { play, pause, stop, setBpm, setTuning, setMetronome, loadSamples };
 })();

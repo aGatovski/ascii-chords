@@ -43,6 +43,10 @@
       const qs = new URLSearchParams(params || {}).toString();
       return this.req('GET', '/api/songs' + (qs ? '?' + qs : ''));
     },
+    listPublicSongs(params) {
+      const qs = new URLSearchParams(params || {}).toString();
+      return this.req('GET', '/api/public/songs' + (qs ? '?' + qs : ''));
+    },
     getSong(id)           { return this.req('GET', '/api/songs/' + id); },
     createSong(data)      { return this.req('POST', '/api/songs', data); },
     updateSong(id, data)  { return this.req('PUT', '/api/songs/' + id, data); },
@@ -246,6 +250,8 @@
     { match: /^#song\/(\d+)\/edit$/,   handler: m => viewEditor(parseInt(m[1], 10)) },
     { match: /^#song\/(\d+)$/,         handler: m => viewEditor(parseInt(m[1], 10), { readOnly: true }) },
     { match: /^#chords$/,              handler: viewChords },
+    { match: /^#catalog$/,             handler: viewCatalog },
+    { match: /^#help$/,                handler: viewHelp },
   ];
   function navigate() {
     const hash = window.location.hash || '#library';
@@ -312,6 +318,7 @@
         </div>
         <div class="badges">
           <span class="badge diff-${s.difficulty}">${s.difficulty}</span>
+          ${s.is_public ? '<span class="badge badge-public">🌐 public</span>' : '<span class="badge badge-private">🔒 private</span>'}
           ${(s.tags || []).map(t => `<span class="badge">${escapeHtml(t)}</span>`).join('')}
         </div>
         <div class="actions">
@@ -380,7 +387,7 @@
       id: null, title: '', artist: '', album: '', year: '',
       original_key: 'C', capo: 0, tuning: 'Standard', tempo_bpm: 120,
       difficulty: 'Intermediate', genre: '', strumming: '',
-      notes: '', body: '', tags: [],
+      notes: '', body: '', tags: [], is_public: false, is_owner: true,
     };
     if (songId) {
       try {
@@ -395,13 +402,33 @@
         toast('Restored unsaved draft', '');
       }
     }
-    _editorState = { song, semitones: 0, useFlats: false, readOnly: !!opts.readOnly };
+    // Force read-only when the current user does not own the song.
+    const effectiveReadOnly = !!opts.readOnly || (song.id && song.is_owner === false);
+    _editorState = { song, semitones: 0, useFlats: false, readOnly: effectiveReadOnly };
 
     fillMetaForm(song);
     const ta      = document.getElementById('raw-editor');
     const preview = document.getElementById('preview');
     ta.value = song.body || '';
-    if (opts.readOnly) ta.setAttribute('readonly', '');
+    if (effectiveReadOnly) {
+      ta.setAttribute('readonly', '');
+      // Lock every meta input so the read-only viewer can't edit anything.
+      document.querySelectorAll('.editor-meta-grid input, .editor-meta-grid select, .editor-meta-grid textarea, .editor-meta-bar input')
+        .forEach(el => el.setAttribute('disabled', ''));
+      // Remove save/delete affordances when not the owner.
+      ['save-btn', 'delete-btn'].forEach(id => {
+        const b = document.getElementById(id);
+        if (b) b.style.display = 'none';
+      });
+      // Show a banner when viewing someone else's public song.
+      if (song.id && song.is_owner === false) {
+        const banner = document.createElement('div');
+        banner.className = 'readonly-banner';
+        banner.textContent = '👁 Viewing a public song from the catalog. You cannot edit or save changes.';
+        const view = document.querySelector('.editor-view');
+        if (view) view.insertBefore(banner, view.firstChild);
+      }
+    }
 
     // Live preview with debounce
     let renderTimer;
@@ -428,6 +455,7 @@
       [
         'meta-title','meta-artist','meta-album','meta-year','meta-key','meta-capo',
         'meta-tuning','meta-bpm','meta-difficulty','meta-genre','meta-tags','meta-notes',
+        'meta-is-public',
       ].forEach(id => {
         const el = document.getElementById(id);
         if (el) {
@@ -455,6 +483,7 @@
     document.getElementById('meta-genre').value      = s.genre || '';
     document.getElementById('meta-tags').value       = (s.tags || []).join(', ');
     document.getElementById('meta-notes').value      = s.notes || '';
+    document.getElementById('meta-is-public').checked = !!s.is_public;
     const bpmDisplay = document.getElementById('bpm-display');
     document.getElementById('bpm-slider').value      = s.tempo_bpm || 120;
     bpmDisplay.value = s.tempo_bpm || 120;
@@ -475,6 +504,7 @@
       tags:         document.getElementById('meta-tags').value
                       .split(',').map(s => s.trim()).filter(Boolean),
       notes:        document.getElementById('meta-notes').value,
+      is_public:    document.getElementById('meta-is-public').checked,
       body:         document.getElementById('raw-editor').value,
     };
   }
@@ -542,12 +572,17 @@
     // Playback
     document.getElementById('play-btn').addEventListener('click', () => {
       const text = applyTransposition(ta.value, _editorState.semitones, _editorState.useFlats);
-      window.Player.play(text, parseInt(bpmSlider.value, 10));
+      const tuning = document.getElementById('meta-tuning').value;
+      window.Player.play(text, parseInt(bpmSlider.value, 10), tuning);
     });
     document.getElementById('pause-btn').addEventListener('click', () => window.Player.pause());
     document.getElementById('stop-btn').addEventListener('click',  () => window.Player.stop());
     document.getElementById('metronome-toggle').addEventListener('change', e => {
       window.Player.setMetronome(e.target.checked);
+    });
+    // Tuning change — apply immediately to any in-flight playback
+    document.getElementById('meta-tuning').addEventListener('change', e => {
+      if (window.Player) window.Player.setTuning(e.target.value);
     });
 
     // Autoscroll
@@ -638,12 +673,36 @@
       const items = filter
         ? lib.filter(c => c.chord_name.toLowerCase().includes(filter))
         : lib;
-      grid.innerHTML = items.map(c => `
-        <div class="chord-card">
-          <div class="chord-card-name">${escapeHtml(c.chord_name)} <span class="muted">v${c.variant}</span></div>
-          <pre>${escapeHtml(Chords.renderDiagram(c.chord_name, c.frets, c.barre_fret))}</pre>
-        </div>
-      `).join('');
+      grid.innerHTML = items.map(c => {
+        const isMine = c.user_id !== null;
+        return `
+          <div class="chord-card" data-id="${c.id}" data-mine="${isMine ? '1' : '0'}">
+            <div class="chord-card-name">
+              ${escapeHtml(c.chord_name)} <span class="muted">v${c.variant}</span>
+              ${isMine ? '<button class="link-btn chord-del" title="Delete custom chord">🗑</button>' : ''}
+            </div>
+            <pre>${escapeHtml(Chords.renderDiagram(c.chord_name, c.frets, c.barre_fret))}</pre>
+          </div>
+        `;
+      }).join('');
+
+      // Wire delete buttons for user-owned chords.
+      grid.querySelectorAll('.chord-del').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+          e.stopPropagation();
+          const card = btn.closest('.chord-card');
+          const id = parseInt(card.dataset.id, 10);
+          if (!confirm('Delete this custom chord?')) return;
+          try {
+            await API.deleteChord(id);
+            // Refresh library
+            const data = await API.listChords();
+            Chords.setLibrary(data.chords);
+            render(search.value.trim().toLowerCase());
+            toast('Chord deleted', 'success');
+          } catch (err) { toast(err.message, 'error'); }
+        });
+      });
     }
     render('');
     let t;
@@ -651,6 +710,228 @@
       clearTimeout(t);
       t = setTimeout(() => render(search.value.trim().toLowerCase()), 120);
     });
+
+    // ---- Visual chord builder ----
+    initChordBuilder(() => render(search.value.trim().toLowerCase()));
+  }
+
+  // -------- Visual chord builder --------
+  // State: frets[] indexed low-to-high (E A D G B e) matching API + library.
+  // Values: -1 = muted, 0 = open, 1..12 = pressed fret.
+  function initChordBuilder(onSaved) {
+    const toggle  = document.getElementById('chord-builder-toggle');
+    const panel   = document.getElementById('chord-builder');
+    const closeBtn= document.getElementById('cb-close');
+    const board   = document.getElementById('cb-fretboard');
+    const nameEl  = document.getElementById('cb-name');
+    const variant = document.getElementById('cb-variant');
+    const barreEl = document.getElementById('cb-barre');
+    const preview = document.getElementById('cb-preview');
+    const saveBtn = document.getElementById('cb-save');
+    const resetBtn= document.getElementById('cb-reset');
+
+    const FRET_ROWS  = 5;                                  // fret 1..5 visible
+    // Display order: high-e on the LEFT, low-E on the RIGHT — matches the
+    // existing renderDiagram convention.
+    const STRING_DISPLAY = ['e', 'B', 'G', 'D', 'A', 'E']; // index 0 = high e
+    // Maps a display column index to its low-to-high library index.
+    function displayToLibIdx(displayIdx) { return 5 - displayIdx; }
+
+    // Internal state — low-to-high
+    let frets = [-1, -1, -1, -1, -1, -1]; // start all muted
+
+    function renderBoard() {
+      const cells = [];
+      // Header row: ✕ / ○ toggles per string, click cycles muted → open → muted
+      cells.push('<div class="cb-row cb-row-status">');
+      for (let d = 0; d < 6; d++) {
+        const libIdx = displayToLibIdx(d);
+        const v = frets[libIdx];
+        const sym = v === -1 ? '✕' : v === 0 ? '○' : '·';
+        const cls = v === -1 ? 'mute' : v === 0 ? 'open' : 'fretted';
+        cells.push(`<button type="button" class="cb-status ${cls}" data-display="${d}" title="${STRING_DISPLAY[d]} string">${sym}</button>`);
+      }
+      cells.push('</div>');
+      // Fret rows
+      for (let f = 1; f <= FRET_ROWS; f++) {
+        cells.push(`<div class="cb-row cb-row-fret" data-fret="${f}">`);
+        cells.push(`<span class="cb-fret-num">${f}</span>`);
+        for (let d = 0; d < 6; d++) {
+          const libIdx = displayToLibIdx(d);
+          const pressed = frets[libIdx] === f;
+          cells.push(`<button type="button" class="cb-cell ${pressed ? 'pressed' : ''}" data-display="${d}" data-fret="${f}"></button>`);
+        }
+        cells.push('</div>');
+      }
+      // String labels at the bottom
+      cells.push('<div class="cb-row cb-row-labels"><span></span>');
+      for (let d = 0; d < 6; d++) {
+        cells.push(`<span class="cb-label">${STRING_DISPLAY[d]}</span>`);
+      }
+      cells.push('</div>');
+      board.innerHTML = cells.join('');
+      renderPreview();
+      wireCells();
+    }
+
+    function wireCells() {
+      board.querySelectorAll('.cb-cell').forEach(cell => {
+        cell.addEventListener('click', () => {
+          const d = parseInt(cell.dataset.display, 10);
+          const f = parseInt(cell.dataset.fret, 10);
+          const libIdx = displayToLibIdx(d);
+          // Click the same fret again to release the string (set to open).
+          frets[libIdx] = (frets[libIdx] === f) ? 0 : f;
+          renderBoard();
+        });
+      });
+      board.querySelectorAll('.cb-status').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const d = parseInt(btn.dataset.display, 10);
+          const libIdx = displayToLibIdx(d);
+          // Cycle: pressed-fret → open → muted → open
+          if (frets[libIdx] > 0) frets[libIdx] = 0;
+          else if (frets[libIdx] === 0) frets[libIdx] = -1;
+          else frets[libIdx] = 0;
+          renderBoard();
+        });
+      });
+    }
+
+    function renderPreview() {
+      const name  = nameEl.value.trim() || 'New';
+      const barre = barreEl.value === '' ? null : parseInt(barreEl.value, 10);
+      preview.textContent = Chords.renderDiagram(name, frets, barre);
+    }
+
+    function reset() {
+      frets = [-1, -1, -1, -1, -1, -1];
+      nameEl.value = '';
+      variant.value = '1';
+      barreEl.value = '';
+      renderBoard();
+    }
+
+    toggle.addEventListener('click', () => {
+      panel.classList.toggle('hidden');
+      if (!panel.classList.contains('hidden')) renderBoard();
+    });
+    closeBtn.addEventListener('click', () => panel.classList.add('hidden'));
+    nameEl.addEventListener('input', renderPreview);
+    barreEl.addEventListener('input', renderPreview);
+    resetBtn.addEventListener('click', reset);
+
+    saveBtn.addEventListener('click', async () => {
+      const name = nameEl.value.trim();
+      if (!name) { toast('Please enter a chord name', 'error'); return; }
+      // Require at least one fretted or open string — all-muted is nonsense.
+      if (frets.every(f => f === -1)) {
+        toast('At least one string must be fretted or open', 'error');
+        return;
+      }
+      const barre = barreEl.value === '' ? null : parseInt(barreEl.value, 10);
+      try {
+        await API.addChord({
+          chord_name: name,
+          variant:    parseInt(variant.value, 10) || 1,
+          frets:      frets,
+          barre_fret: barre,
+        });
+        // Refetch library so the new shape appears in popovers and the dict.
+        const data = await API.listChords();
+        Chords.setLibrary(data.chords);
+        toast('Chord saved', 'success');
+        reset();
+        panel.classList.add('hidden');
+        if (onSaved) onSaved();
+      } catch (e) { toast(e.message, 'error'); }
+    });
+
+    renderBoard();
+  }
+
+  // -------- Public catalog view --------
+  async function viewCatalog() {
+    const root = document.getElementById('view-root');
+    root.innerHTML = '';
+    const tpl = document.getElementById('tpl-catalog').content.cloneNode(true);
+    root.appendChild(tpl);
+
+    const search = document.getElementById('cat-search');
+    const diff   = document.getElementById('cat-difficulty');
+    const sort   = document.getElementById('cat-sort');
+
+    async function refresh() {
+      try {
+        const params = {};
+        if (search.value.trim()) params.q = search.value.trim();
+        if (diff.value)          params.difficulty = diff.value;
+        if (sort.value)          params.sort = sort.value;
+        const data = await API.listPublicSongs(params);
+        renderCatalogList(data.songs);
+      } catch (e) { toast(e.message, 'error'); }
+    }
+    let typingTimer;
+    search.addEventListener('input', () => {
+      clearTimeout(typingTimer);
+      typingTimer = setTimeout(refresh, 200);
+    });
+    diff.addEventListener('change', refresh);
+    sort.addEventListener('change', refresh);
+
+    refresh();
+  }
+
+  function renderCatalogList(songs) {
+    const grid  = document.getElementById('cat-list');
+    const empty = document.getElementById('cat-empty');
+    if (!songs.length) { grid.innerHTML = ''; empty.classList.remove('hidden'); return; }
+    empty.classList.add('hidden');
+    grid.innerHTML = songs.map(s => `
+      <article class="song-card" data-id="${s.id}">
+        <h3>🎸 ${escapeHtml(s.title)}</h3>
+        <div class="meta-row">
+          ${escapeHtml(s.artist || '')}
+          ${s.year ? ' · ' + s.year : ''}
+          ${s.author ? ' · by <em>' + escapeHtml(s.author) + '</em>' : ''}
+        </div>
+        <div class="meta-row">
+          Key: ${escapeHtml(s.original_key || '–')} ·
+          Capo: ${s.capo ? s.capo : 'none'} ·
+          Tuning: ${escapeHtml(s.tuning || 'Standard')} ·
+          ${s.tempo_bpm} BPM
+        </div>
+        <div class="badges">
+          <span class="badge diff-${s.difficulty}">${s.difficulty}</span>
+          ${s.genre ? `<span class="badge">${escapeHtml(s.genre)}</span>` : ''}
+          ${(s.tags || []).map(t => `<span class="badge">${escapeHtml(t)}</span>`).join('')}
+        </div>
+        <div class="actions">
+          <a class="primary" href="#song/${s.id}">View</a>
+          <button data-act="json">JSON</button>
+          <button data-act="txt">TXT</button>
+        </div>
+      </article>
+    `).join('');
+
+    grid.querySelectorAll('.song-card').forEach(card => {
+      const id = parseInt(card.dataset.id, 10);
+      card.querySelectorAll('button[data-act]').forEach(btn => {
+        btn.addEventListener('click', () => {
+          const act = btn.dataset.act;
+          if (act === 'json') window.location.href = '/api/songs/' + id + '/export/json';
+          else if (act === 'txt') window.location.href = '/api/songs/' + id + '/export/txt';
+        });
+      });
+    });
+  }
+
+  // -------- Help view --------
+  function viewHelp() {
+    const root = document.getElementById('view-root');
+    root.innerHTML = '';
+    const tpl = document.getElementById('tpl-help').content.cloneNode(true);
+    root.appendChild(tpl);
   }
 
   // -------- Boot --------

@@ -76,6 +76,9 @@ try {
         case 'songs':
             handle_songs($id, $action, $sub, $method);
             break;
+        case 'public':
+            handle_public($id, $action, $method);
+            break;
         case 'chords':
             handle_chords($id, $method);
             break;
@@ -165,6 +168,9 @@ function song_to_array(array $row): array {
     $row['year']      = $row['year']      !== null ? (int)$row['year']      : null;
     $row['capo']      = (int)$row['capo'];
     $row['tempo_bpm'] = (int)$row['tempo_bpm'];
+    if (array_key_exists('is_public', $row)) {
+        $row['is_public'] = (int)$row['is_public'] === 1;
+    }
     return $row;
 }
 
@@ -257,7 +263,7 @@ function return_songs_list(PDO $pdo): void {
     };
 
     $sql  = 'SELECT id, user_id, title, artist, album, year, original_key, capo,
-                    tuning, tempo_bpm, difficulty, genre, strumming, updated_at
+                    tuning, tempo_bpm, difficulty, genre, strumming, is_public, updated_at
              FROM songs WHERE ' . implode(' AND ', $where) . " ORDER BY $orderBy";
     $stmt = $pdo->prepare($sql);
     $stmt->execute($args);
@@ -289,6 +295,7 @@ function build_song_payload_from_body(array $b): array {
         'strumming'    => isset($b['strumming']) ? trim((string)$b['strumming']) : null,
         'notes'        => isset($b['notes']) ? (string)$b['notes'] : null,
         'body'         => (string)($b['body'] ?? ''),
+        'is_public'    => !empty($b['is_public']) ? 1 : 0,
         'tags'         => is_array($b['tags'] ?? null) ? $b['tags'] : [],
     ];
 }
@@ -303,13 +310,14 @@ function return_songs_create(PDO $pdo): void {
     $stmt = $pdo->prepare(
         'INSERT INTO songs
             (user_id, title, artist, album, year, original_key, capo, tuning,
-             tempo_bpm, difficulty, genre, strumming, notes, body)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
+             tempo_bpm, difficulty, genre, strumming, notes, body, is_public)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
     );
     $stmt->execute([
         $userId, $p['title'], $p['artist'], $p['album'], $p['year'],
         $p['original_key'], $p['capo'], $p['tuning'], $p['tempo_bpm'],
         $p['difficulty'], $p['genre'], $p['strumming'], $p['notes'], $p['body'],
+        $p['is_public'],
     ]);
     $songId = (int)$pdo->lastInsertId();
     set_song_tags($pdo, $songId, $p['tags']);
@@ -317,13 +325,22 @@ function return_songs_create(PDO $pdo): void {
 }
 
 function return_song_get(PDO $pdo, int $songId, int $code = 200): void {
-    $userId = require_auth();
-    $stmt = $pdo->prepare('SELECT * FROM songs WHERE id = ? AND user_id = ?');
-    $stmt->execute([$songId, $userId]);
+    // Owner can always read; everyone else can read only if is_public.
+    $userId = (int)($_SESSION['user_id'] ?? 0);
+    $stmt = $pdo->prepare('SELECT * FROM songs WHERE id = ?');
+    $stmt->execute([$songId]);
     $row = $stmt->fetch();
     if (!$row) json_response(['error' => 'Not found'], 404);
+    $isOwner  = ((int)$row['user_id'] === $userId && $userId > 0);
+    $isPublic = (int)$row['is_public'] === 1;
+    if (!$isOwner && !$isPublic) {
+        // Hide existence from non-owners on private songs
+        if ($userId === 0) json_response(['error' => 'Unauthorized'], 401);
+        json_response(['error' => 'Not found'], 404);
+    }
     $row = song_to_array($row);
-    $row['tags'] = fetch_song_tags($pdo, $songId);
+    $row['tags']      = fetch_song_tags($pdo, $songId);
+    $row['is_owner']  = $isOwner;
     json_response(['song' => $row], $code);
 }
 
@@ -342,13 +359,15 @@ function return_song_update(PDO $pdo, int $songId): void {
     $upd = $pdo->prepare(
         'UPDATE songs SET
             title=?, artist=?, album=?, year=?, original_key=?, capo=?, tuning=?,
-            tempo_bpm=?, difficulty=?, genre=?, strumming=?, notes=?, body=?
+            tempo_bpm=?, difficulty=?, genre=?, strumming=?, notes=?, body=?,
+            is_public=?
          WHERE id=? AND user_id=?'
     );
     $upd->execute([
         $p['title'], $p['artist'], $p['album'], $p['year'],
         $p['original_key'], $p['capo'], $p['tuning'], $p['tempo_bpm'],
         $p['difficulty'], $p['genre'], $p['strumming'], $p['notes'], $p['body'],
+        $p['is_public'],
         $songId, $userId,
     ]);
     set_song_tags($pdo, $songId, $p['tags']);
@@ -387,11 +406,17 @@ function song_to_plain_text(array $song): string {
 }
 
 function return_song_export(PDO $pdo, int $songId, string $format): void {
-    $userId = require_auth();
-    $stmt = $pdo->prepare('SELECT * FROM songs WHERE id = ? AND user_id = ?');
-    $stmt->execute([$songId, $userId]);
+    $userId = (int)($_SESSION['user_id'] ?? 0);
+    $stmt = $pdo->prepare('SELECT * FROM songs WHERE id = ?');
+    $stmt->execute([$songId]);
     $row = $stmt->fetch();
     if (!$row) json_response(['error' => 'Not found'], 404);
+    $isOwner  = ((int)$row['user_id'] === $userId && $userId > 0);
+    $isPublic = (int)$row['is_public'] === 1;
+    if (!$isOwner && !$isPublic) {
+        if ($userId === 0) json_response(['error' => 'Unauthorized'], 401);
+        json_response(['error' => 'Not found'], 404);
+    }
     $row = song_to_array($row);
     $row['tags'] = fetch_song_tags($pdo, $songId);
 
@@ -513,4 +538,62 @@ function handle_chords(?string $id, string $method): void {
         json_response(['ok' => true]);
     }
     json_response(['error' => 'Method not allowed'], 405);
+}
+
+// ---------- Public catalog -------------------------------------------------
+// Read-only listing of songs across all users that have is_public=1.
+// No authentication required — this is the public face of the site.
+
+function handle_public(?string $id, ?string $action, string $method): void {
+    if ($id !== 'songs' || $method !== 'GET') {
+        json_response(['error' => 'Not found'], 404);
+    }
+    $pdo = get_pdo();
+
+    $q          = trim((string)($_GET['q'] ?? ''));
+    $key        = trim((string)($_GET['key'] ?? ''));
+    $difficulty = trim((string)($_GET['difficulty'] ?? ''));
+    $genre      = trim((string)($_GET['genre'] ?? ''));
+    $tuning     = trim((string)($_GET['tuning'] ?? ''));
+    $sort       = (string)($_GET['sort'] ?? 'updated_desc');
+
+    $where = ['s.is_public = 1'];
+    $args  = [];
+    if ($q !== '') {
+        $where[] = '(s.title LIKE ? OR s.artist LIKE ?)';
+        $args[]  = '%' . $q . '%';
+        $args[]  = '%' . $q . '%';
+    }
+    if ($key !== '')        { $where[] = 's.original_key = ?'; $args[] = $key; }
+    if ($difficulty !== '') { $where[] = 's.difficulty = ?';   $args[] = $difficulty; }
+    if ($genre !== '')      { $where[] = 's.genre = ?';        $args[] = $genre; }
+    if ($tuning !== '')     { $where[] = 's.tuning = ?';       $args[] = $tuning; }
+
+    $orderBy = match ($sort) {
+        'title_asc'    => 's.title ASC',
+        'artist_asc'   => 's.artist ASC',
+        'updated_asc'  => 's.updated_at ASC',
+        'difficulty'   => "FIELD(s.difficulty,'Beginner','Intermediate','Advanced')",
+        default        => 's.updated_at DESC',
+    };
+
+    $sql = 'SELECT s.id, s.user_id, s.title, s.artist, s.album, s.year,
+                   s.original_key, s.capo, s.tuning, s.tempo_bpm, s.difficulty,
+                   s.genre, s.strumming, s.is_public, s.updated_at,
+                   u.username AS author
+            FROM songs s
+            JOIN users u ON u.id = s.user_id
+            WHERE ' . implode(' AND ', $where) . " ORDER BY $orderBy LIMIT 200";
+    $stmt = $pdo->prepare($sql);
+    $stmt->execute($args);
+    $rows = array_map(function ($r) {
+        $r = song_to_array($r);
+        return $r;
+    }, $stmt->fetchAll());
+    foreach ($rows as &$row) {
+        $row['tags'] = fetch_song_tags($pdo, $row['id']);
+    }
+    unset($row);
+
+    json_response(['songs' => $rows]);
 }

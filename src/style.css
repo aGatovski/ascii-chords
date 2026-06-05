@@ -385,6 +385,194 @@ input:focus, select:focus, textarea:focus {
   font-weight: 700;
   margin-bottom: 0.3rem;
   color: var(--accent-2);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+}
+.chord-del {
+  font-size: 0.85em;
+  color: var(--muted);
+}
+.chord-del:hover { color: var(--danger); }
+
+/* ============================================================
+   Visual chord builder
+   ============================================================ */
+.chord-builder {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem;
+  margin: 1rem 0;
+}
+.chord-builder.hidden { display: none; }
+.cb-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.6rem;
+}
+.cb-header h3 { margin: 0; }
+.cb-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.8rem;
+  margin-bottom: 0.8rem;
+}
+.cb-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.85em;
+  color: var(--muted);
+}
+.cb-grid input { width: 9rem; }
+
+.cb-fretboard {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.6rem;
+  display: inline-block;
+  font-family: var(--mono);
+}
+.cb-row {
+  display: grid;
+  grid-template-columns: 1.6rem repeat(6, 2.2rem);
+  gap: 0.2rem;
+  align-items: center;
+  margin: 0.15rem 0;
+}
+.cb-row-status,
+.cb-row-labels { grid-template-columns: repeat(6, 2.2rem); padding-left: 1.6rem; }
+
+.cb-status {
+  width: 2.2rem;
+  height: 1.6rem;
+  border-radius: 4px;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  color: var(--text);
+  cursor: pointer;
+  font-family: var(--mono);
+  padding: 0;
+}
+.cb-status.mute     { color: var(--danger); }
+.cb-status.open     { color: var(--success); }
+.cb-status.fretted  { color: var(--muted); }
+.cb-status:hover    { background: #262b38; }
+
+.cb-fret-num {
+  text-align: right;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.8em;
+  padding-right: 0.3rem;
+}
+.cb-cell {
+  width: 2.2rem;
+  height: 1.8rem;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  padding: 0;
+}
+.cb-cell:hover { background: #262b38; }
+.cb-cell.pressed {
+  background: var(--accent);
+  border-color: var(--accent);
+  position: relative;
+}
+.cb-cell.pressed::after {
+  content: '●';
+  color: #1a1300;
+  font-size: 1rem;
+  display: block;
+  text-align: center;
+  line-height: 1.6rem;
+}
+.cb-label {
+  text-align: center;
+  font-family: var(--mono);
+  color: var(--muted);
+  font-size: 0.85em;
+}
+.cb-actions {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+  margin-top: 0.8rem;
+  flex-wrap: wrap;
+}
+.cb-preview {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  padding: 0.6rem;
+  border-radius: 6px;
+  font-family: var(--mono);
+  white-space: pre;
+  margin: 0;
+  font-size: 12px;
+}
+
+/* ============================================================
+   Public / private badges + read-only banner
+   ============================================================ */
+.badge-public  { color: #34d399; border-color: #14532d; }
+.badge-private { color: var(--muted); }
+.readonly-banner {
+  background: rgba(110, 168, 254, 0.12);
+  border: 1px solid var(--chord);
+  border-radius: 6px;
+  padding: 0.6rem 0.9rem;
+  margin-bottom: 0.6rem;
+  color: var(--chord);
+}
+
+/* Inline checkbox label inside the meta grid (overrides the column layout
+   so the checkbox sits next to its caption instead of stacked above it). */
+.editor-meta-grid label.checkbox {
+  flex-direction: row;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--text);
+  font-size: 0.95em;
+}
+.editor-meta-grid label.checkbox input { width: auto; margin: 0; }
+
+/* ============================================================
+   Help view
+   ============================================================ */
+.help-view {
+  max-width: 760px;
+  line-height: 1.7;
+}
+.help-view h2 { margin-top: 0; color: var(--accent-2); }
+.help-view h3 {
+  color: var(--accent-2);
+  margin-top: 1.6em;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.3em;
+}
+.help-view code {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.05em 0.4em;
+  font-family: var(--mono);
+  font-size: 0.95em;
+  color: var(--accent-2);
+}
+.help-view pre {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.8rem 1rem;
+  font-family: var(--mono);
+  overflow-x: auto;
+  color: var(--text);
 }
 
 /* ============================================================
