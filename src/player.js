@@ -135,6 +135,9 @@ window.Player = (function () {
     osc.connect(g).connect(audioCtx.destination);
     osc.start(time);
     osc.stop(time + 0.06);
+    // Track the node so stop() and toggling the checkbox off can cancel
+    // ticks that were already scheduled into the future.
+    scheduled.push({ node: osc, kind: 'metronome' });
   }
 
   // ---- Song scheduling ---------------------------------------------------
@@ -286,7 +289,18 @@ window.Player = (function () {
   }
 
   function setBpm(v)        { bpm = v; }
-  function setMetronome(on) { metronomeOn = !!on; }
+  function setMetronome(on) {
+    metronomeOn = !!on;
+    if (!metronomeOn) {
+      // Cancel ticks already scheduled for the future
+      for (const s of scheduled) {
+        if (s.kind === 'metronome') {
+          try { s.node.stop(); } catch (e) {}
+        }
+      }
+      scheduled = scheduled.filter(s => s.kind !== 'metronome');
+    }
+  }
 
   return { play, pause, stop, setBpm, setMetronome, loadSamples };
 })();
