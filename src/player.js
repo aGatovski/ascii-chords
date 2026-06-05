@@ -1,23 +1,48 @@
 /* ============================================================
-   player.js — Web Audio API playback engine
+   player.js — Web Audio playback engine
+
+   Sample-first: loads 6 open-string acoustic guitar recordings
+   from /sounds/{E2,A2,D3,G3,B3,E4}.mp3 on first user interaction,
+   then plays fretted notes by pitch-shifting the matching sample
+   via AudioBufferSourceNode.playbackRate = 2^(fret/12).
+
+   Falls back to sawtooth synthesis if samples are unavailable.
    ============================================================ */
 
 window.Player = (function () {
   'use strict';
 
+  // Strings indexed low-to-high (E A D G B e) so it matches the chord
+  // library convention. STRING_OPEN_FREQ is keyed by the *display*
+  // letter (e/B/G/D/A/E) — used by both the synth fallback and the
+  // sample picker (we map letters → buffer index below).
   const STRING_OPEN_FREQ = {
-    e: 329.63, B: 246.94, G: 196.00, D: 146.83, A: 110.00, E: 82.41,
+    E: 82.41, A: 110.00, D: 146.83, G: 196.00, B: 246.94, e: 329.63,
+  };
+  // Order matches the sample files E2..E4 (low to high)
+  const SAMPLE_ORDER = ['E', 'A', 'D', 'G', 'B', 'e'];
+  const SAMPLE_FILES = {
+    E: 'sounds/E2.mp3',
+    A: 'sounds/A2.mp3',
+    D: 'sounds/D3.mp3',
+    G: 'sounds/G3.mp3',
+    B: 'sounds/B3.mp3',
+    e: 'sounds/E4.mp3',
   };
 
   let ctx = null;
   let bpm = 120;
   let metronomeOn = false;
-  let scheduled = [];      // array of {oscNode, gainNode, stopTime}
+  let scheduled = [];
   let isPlaying = false;
   let isPaused = false;
-  let pauseAtTime = 0;
   let activeBeatTimer = null;
-  let activeBlockEl = null;
+
+  // ---- Sample cache ------------------------------------------------------
+  // buffers[stringLetter] = AudioBuffer | null. Null = synth-only fallback.
+  const buffers = {};
+  let samplesLoadingPromise = null;
+  let samplesReady = false;
 
   function getCtx() {
     if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -31,7 +56,61 @@ window.Player = (function () {
     return open * Math.pow(2, fret / 12);
   }
 
-  function pluckNote(audioCtx, frequency, startTime, duration = 0.4, gain = 0.18) {
+  // ---- Sample loading ----------------------------------------------------
+  async function loadSamples() {
+    if (samplesReady) return;
+    if (samplesLoadingPromise) return samplesLoadingPromise;
+
+    const audioCtx = getCtx();
+    samplesLoadingPromise = (async () => {
+      const tasks = SAMPLE_ORDER.map(async (letter) => {
+        try {
+          const r = await fetch(SAMPLE_FILES[letter]);
+          if (!r.ok) throw new Error('HTTP ' + r.status);
+          const arr = await r.arrayBuffer();
+          const buf = await new Promise((resolve, reject) =>
+            audioCtx.decodeAudioData(arr.slice(0), resolve, reject)
+          );
+          buffers[letter] = buf;
+        } catch (e) {
+          console.warn('[player] sample load failed for', letter, e.message);
+          buffers[letter] = null;
+        }
+      });
+      await Promise.all(tasks);
+      samplesReady = SAMPLE_ORDER.some(l => buffers[l]);
+    })();
+    return samplesLoadingPromise;
+  }
+
+  // ---- Note playback -----------------------------------------------------
+  // Plays one note at the given absolute audioContext time.
+  // If a sample is loaded for the string, pitch-shifts it; otherwise
+  // falls back to the synth pluck.
+  function playNote(audioCtx, stringName, fret, startTime, gain = 0.18) {
+    const buf = buffers[stringName];
+    if (buf) {
+      const src = audioCtx.createBufferSource();
+      const g   = audioCtx.createGain();
+      src.buffer = buf;
+      src.playbackRate.value = Math.pow(2, fret / 12);
+      g.gain.setValueAtTime(gain, startTime);
+      // Slight release so cutoff isn't abrupt when notes overlap
+      g.gain.setValueAtTime(gain, startTime + 1.5);
+      g.gain.exponentialRampToValueAtTime(0.0001, startTime + 1.9);
+      src.connect(g).connect(audioCtx.destination);
+      src.start(startTime);
+      src.stop(startTime + 2.0);
+      scheduled.push({ node: src });
+      return;
+    }
+    // Fallback: synth oscillator
+    const freq = noteFrequency(stringName, fret);
+    if (freq == null) return;
+    pluckSynth(audioCtx, freq, startTime, 0.5, gain);
+  }
+
+  function pluckSynth(audioCtx, frequency, startTime, duration = 0.5, gain = 0.18) {
     const osc = audioCtx.createOscillator();
     const g   = audioCtx.createGain();
     osc.type = 'sawtooth';
@@ -42,7 +121,7 @@ window.Player = (function () {
     osc.connect(g).connect(audioCtx.destination);
     osc.start(startTime);
     osc.stop(startTime + duration + 0.05);
-    scheduled.push({ osc, gain: g, stopTime: startTime + duration });
+    scheduled.push({ node: osc });
   }
 
   function metronomeTick(audioCtx, time, accent = false) {
@@ -58,7 +137,7 @@ window.Player = (function () {
     osc.stop(time + 0.06);
   }
 
-  // -------- Schedule a song --------
+  // ---- Song scheduling ---------------------------------------------------
   function scheduleSong(text, songBpm) {
     bpm = songBpm || bpm;
     const audioCtx = getCtx();
@@ -70,7 +149,6 @@ window.Player = (function () {
     let i = 0;
     while (i < lines.length) {
       const line = lines[i];
-      // Detect tab block
       if (/^\s*[eEBGDAd]\|/.test(line)) {
         const block = [line];
         while (i + 1 < lines.length && /^\s*[eEBGDAd]\|/.test(lines[i + 1])) {
@@ -78,13 +156,11 @@ window.Player = (function () {
         }
         cursor = scheduleTabBlock(audioCtx, block, beatInterval, cursor);
       } else if (line.trim() === '') {
-        // Blank line = small gap
         cursor += beatInterval * 0.5;
       } else if (/^\[.+\]$/.test(line.trim())) {
         cursor += beatInterval * 0.5;
       } else if (window.Chords && window.Chords.isChordLine(line)) {
         cursor = scheduleChordLine(audioCtx, line, beatInterval, cursor);
-        // Skip the paired lyric line (no audio)
         if (i + 1 < lines.length && lines[i + 1].trim() !== ''
             && !window.Chords.isChordLine(lines[i + 1])
             && !/^\s*[eEBGDAd]\|/.test(lines[i + 1])
@@ -92,7 +168,6 @@ window.Player = (function () {
           i++;
         }
       } else {
-        // Plain lyric line — small advance
         cursor += beatInterval;
       }
       i++;
@@ -101,33 +176,31 @@ window.Player = (function () {
   }
 
   function scheduleTabBlock(audioCtx, blockLines, beatInterval, startTime) {
-    // Strip the leading "X|" from each line so columns align
-    const stringLetters = blockLines.map(l => l.match(/^\s*([eEBGDAd])\|/)?.[1] || 'e');
+    // Map prefixes like "e|" / "B|" to canonical letters used by samples.
+    // Tab convention: top line = high e, bottom line = low E.
+    const letters = blockLines.map(l => {
+      const m = l.match(/^\s*([eEBGDAd])\|/);
+      if (!m) return 'e';
+      const ch = m[1];
+      if (ch === 'e') return 'e';
+      if (ch === 'd') return 'D';   // some tabs use lower-case d for the D string
+      return ch;                     // E, B, G, D, A
+    });
     const bodies = blockLines.map(l => l.replace(/^\s*[eEBGDAd]\|/, ''));
     const maxLen = Math.max(...bodies.map(b => b.length));
 
     let time = startTime;
     let col = 0;
     while (col < maxLen) {
-      let played = false;
       for (let s = 0; s < bodies.length; s++) {
         const body = bodies[s];
         if (col >= body.length) continue;
-        // Read a possibly multi-digit fret number starting at col
-        let m = body.substring(col).match(/^(\d{1,2})/);
+        const m = body.substring(col).match(/^(\d{1,2})/);
         if (m) {
           const fret = parseInt(m[1], 10);
-          const string = stringLetters[s].toLowerCase() === 'e' ?
-                          (s === 0 ? 'e' : 'E') : stringLetters[s];
-          const freq = noteFrequency(string, fret);
-          if (freq) {
-            pluckNote(audioCtx, freq, time + s * 0.004);
-            played = true;
-          }
+          playNote(audioCtx, letters[s], fret, time + s * 0.004, 0.2);
         }
       }
-      // Advance one column (one character). To make tab playback feel natural,
-      // each "-" or note column is one sub-beat.
       col += 1;
       time += beatInterval / 4;
     }
@@ -141,7 +214,6 @@ window.Player = (function () {
   }
 
   function scheduleChordLine(audioCtx, chordsLine, beatInterval, startTime) {
-    // Each chord token plays as a strum at successive beats
     if (!window.Chords) return startTime + beatInterval;
     let time = startTime;
     const tokens = chordsLine.trim().split(/\s+/);
@@ -149,15 +221,13 @@ window.Player = (function () {
       if (!window.Chords.isChordToken(tok)) continue;
       const def = window.Chords.getDefault(tok);
       if (def && def.frets) {
-        // Strum from low E (index 0) to high e (index 5)
+        // chord library frets stored low-to-high (E A D G B e)
         for (let s = 0; s < 6; s++) {
           const fret = def.frets[s];
           if (fret < 0) continue;
-          const stringName = ['E', 'A', 'D', 'G', 'B', 'e'][s];
-          const freq = noteFrequency(stringName, fret);
-          if (freq) {
-            pluckNote(audioCtx, freq, time + s * 0.008, 0.5, 0.13);
-          }
+          const stringName = SAMPLE_ORDER[s];   // E,A,D,G,B,e
+          // Strum: 8 ms between strings, low-to-high
+          playNote(audioCtx, stringName, fret, time + s * 0.008, 0.15);
         }
       }
       if (metronomeOn) metronomeTick(audioCtx, time, false);
@@ -166,12 +236,11 @@ window.Player = (function () {
     return time;
   }
 
-  // -------- Beat highlighting (best-effort visual sync) --------
-  function startBeatHighlight(durationSeconds) {
+  // ---- Visual beat pulse -------------------------------------------------
+  function startBeatHighlight() {
     stopBeatHighlight();
     const preview = document.getElementById('preview');
     if (!preview) return;
-    // Simple visual: pulse the active section based on BPM
     const interval = 60 / bpm;
     let beat = 0;
     activeBeatTimer = setInterval(() => {
@@ -188,12 +257,15 @@ window.Player = (function () {
     if (preview) preview.style.outline = '';
   }
 
-  // -------- Public --------
-  function play(text, songBpm) {
+  // ---- Public API --------------------------------------------------------
+  async function play(text, songBpm) {
     stop();
+    // Ensure samples are loaded before scheduling. The user gesture (Play
+    // click) also unblocks the AudioContext, so this is the right moment.
+    await loadSamples();
     isPlaying = true; isPaused = false;
-    const duration = scheduleSong(text, songBpm);
-    startBeatHighlight(duration);
+    scheduleSong(text, songBpm);
+    startBeatHighlight();
   }
 
   function pause() {
@@ -206,7 +278,7 @@ window.Player = (function () {
     isPlaying = false;
     isPaused = false;
     for (const s of scheduled) {
-      try { s.osc.stop(); } catch (e) {}
+      try { s.node.stop(); } catch (e) {}
     }
     scheduled = [];
     if (ctx && ctx.state !== 'closed') ctx.resume();
@@ -216,5 +288,5 @@ window.Player = (function () {
   function setBpm(v)        { bpm = v; }
   function setMetronome(on) { metronomeOn = !!on; }
 
-  return { play, pause, stop, setBpm, setMetronome };
+  return { play, pause, stop, setBpm, setMetronome, loadSamples };
 })();
