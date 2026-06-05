@@ -332,6 +332,7 @@ input:focus, select:focus, textarea:focus {
   align-items: center;
   gap: 0.4rem;
 }
+#bpm-display { width: 4.5rem; }
 
 /* ============================================================
    Chord popover

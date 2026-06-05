@@ -457,7 +457,7 @@
     document.getElementById('meta-notes').value      = s.notes || '';
     const bpmDisplay = document.getElementById('bpm-display');
     document.getElementById('bpm-slider').value      = s.tempo_bpm || 120;
-    bpmDisplay.textContent = s.tempo_bpm || 120;
+    bpmDisplay.value = s.tempo_bpm || 120;
   }
 
   function readMetaForm() {
@@ -516,14 +516,28 @@
       _editorState.useFlats = e.target.value === 'flat'; rerender();
     });
 
-    // BPM slider
+    // BPM slider + manual entry
     const bpmSlider  = document.getElementById('bpm-slider');
     const bpmDisplay = document.getElementById('bpm-display');
-    bpmSlider.addEventListener('input', () => {
-      bpmDisplay.textContent = bpmSlider.value;
-      document.getElementById('meta-bpm').value = bpmSlider.value;
-      if (window.Player) window.Player.setBpm(parseInt(bpmSlider.value, 10));
+    const clampBpm = v => Math.max(40, Math.min(240, parseInt(v, 10) || 120));
+    const applyBpm = (v, opts = {}) => {
+      const n = clampBpm(v);
+      if (!opts.fromSlider) bpmSlider.value = n;
+      if (!opts.fromInput)  bpmDisplay.value = n;
+      document.getElementById('meta-bpm').value = n;
+      if (window.Player) window.Player.setBpm(n);
+    };
+    bpmSlider.addEventListener('input', () => applyBpm(bpmSlider.value, { fromSlider: true }));
+    bpmDisplay.addEventListener('input', () => {
+      // Don't clamp/snap on every keystroke — let the user type freely
+      const n = parseInt(bpmDisplay.value, 10);
+      if (!isNaN(n) && n >= 40 && n <= 240) {
+        bpmSlider.value = n;
+        document.getElementById('meta-bpm').value = n;
+        if (window.Player) window.Player.setBpm(n);
+      }
     });
+    bpmDisplay.addEventListener('change', () => applyBpm(bpmDisplay.value, { fromInput: true }));
 
     // Playback
     document.getElementById('play-btn').addEventListener('click', () => {
