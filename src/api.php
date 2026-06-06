@@ -466,76 +466,27 @@ function return_song_import(): void {
 
 function handle_chords(?string $id, string $method): void {
     $pdo = get_pdo();
-    if ($id === null) {
-        if ($method === 'GET') {
-            $userId = require_auth();
-            $stmt = $pdo->prepare(
-                'SELECT id, user_id, chord_name, variant, frets, fingers, barre_fret
-                 FROM chord_library
-                 WHERE user_id IS NULL OR user_id = ?
-                 ORDER BY chord_name, variant'
-            );
-            $stmt->execute([$userId]);
-            $rows = $stmt->fetchAll();
-            foreach ($rows as &$r) {
-                $r['id']         = (int)$r['id'];
-                $r['user_id']    = $r['user_id'] !== null ? (int)$r['user_id'] : null;
-                $r['variant']    = (int)$r['variant'];
-                $r['barre_fret'] = $r['barre_fret'] !== null ? (int)$r['barre_fret'] : null;
-                $r['frets']      = array_map('intval', explode(',', $r['frets']));
-                $r['fingers']    = $r['fingers'] !== null
-                                    ? array_map('intval', explode(',', $r['fingers']))
-                                    : null;
-            }
-            json_response(['chords' => $rows]);
-        }
-        if ($method === 'POST') {
-            $userId = require_auth();
-            require_csrf();
-            $b = json_body();
-            $name    = trim((string)($b['chord_name'] ?? ''));
-            $variant = clamp_int($b['variant'] ?? 1, 1, 9, 1);
-            $frets   = $b['frets']   ?? null;
-            $fingers = $b['fingers'] ?? null;
-            $barre   = isset($b['barre_fret']) && $b['barre_fret'] !== ''
-                          ? (int)$b['barre_fret'] : null;
-            if ($name === '' || !is_array($frets) || count($frets) !== 6) {
-                json_response(['error' => 'chord_name and 6-element frets[] required'], 400);
-            }
-            $fretsStr   = implode(',', array_map(fn($v) => (string)(int)$v, $frets));
-            $fingersStr = (is_array($fingers) && count($fingers) === 6)
-                           ? implode(',', array_map(fn($v) => (string)(int)$v, $fingers))
-                           : null;
-            try {
-                $stmt = $pdo->prepare(
-                    'INSERT INTO chord_library
-                        (user_id, chord_name, variant, frets, fingers, barre_fret)
-                     VALUES (?,?,?,?,?,?)'
-                );
-                $stmt->execute([$userId, $name, $variant, $fretsStr, $fingersStr, $barre]);
-            } catch (PDOException $e) {
-                if ($e->getCode() === '23000') {
-                    json_response(['error' => 'A chord with that name+variant already exists'], 409);
-                }
-                throw $e;
-            }
-            json_response(['id' => (int)$pdo->lastInsertId()], 201);
-        }
-        json_response(['error' => 'Method not allowed'], 405);
-    }
-
-    $chordId = (int)$id;
-    if ($method === 'DELETE') {
+    if ($id === null && $method === 'GET') {
         $userId = require_auth();
-        require_csrf();
         $stmt = $pdo->prepare(
-            'DELETE FROM chord_library WHERE id = ? AND user_id = ?'
+            'SELECT id, user_id, chord_name, variant, frets, fingers, barre_fret
+             FROM chord_library
+             WHERE user_id IS NULL OR user_id = ?
+             ORDER BY chord_name, variant'
         );
-        $stmt->execute([$chordId, $userId]);
-        if ($stmt->rowCount() === 0) {
-            json_response(['error' => 'Not found or not yours'], 404);
+        $stmt->execute([$userId]);
+        $rows = $stmt->fetchAll();
+        foreach ($rows as &$r) {
+            $r['id']         = (int)$r['id'];
+            $r['user_id']    = $r['user_id'] !== null ? (int)$r['user_id'] : null;
+            $r['variant']    = (int)$r['variant'];
+            $r['barre_fret'] = $r['barre_fret'] !== null ? (int)$r['barre_fret'] : null;
+            $r['frets']      = array_map('intval', explode(',', $r['frets']));
+            $r['fingers']    = $r['fingers'] !== null
+                                ? array_map('intval', explode(',', $r['fingers']))
+                                : null;
         }
-        json_response(['ok' => true]);
+        json_response(['chords' => $rows]);
     }
     json_response(['error' => 'Method not allowed'], 405);
 }

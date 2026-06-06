@@ -95,9 +95,7 @@ the `X-CSRF-Token` header (token from `GET /api/csrf`).
 | DELETE | `/api/songs/{id}` | Delete |
 | GET | `/api/songs/{id}/export/json` | Download |
 | GET | `/api/songs/{id}/export/txt`  | Download |
-| GET | `/api/chords` | Built-in + user-custom |
-| POST | `/api/chords` | Add user-custom shape |
-| DELETE | `/api/chords/{id}` | Delete user-custom shape |
+| GET | `/api/chords` | Built-in chord shapes |
 
 ---
 

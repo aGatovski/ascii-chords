@@ -141,35 +141,7 @@
     <section class="chords-dict-view">
       <header><h2>Chord dictionary</h2>
         <input type="search" id="chord-search" placeholder="Search chord names…" />
-        <button id="chord-builder-toggle" class="primary">+ New chord</button>
       </header>
-
-      <section id="chord-builder" class="chord-builder hidden">
-        <header class="cb-header">
-          <h3>Visual chord builder</h3>
-          <button id="cb-close" class="link-btn">close</button>
-        </header>
-        <div class="cb-grid">
-          <label>Name <input type="text" id="cb-name" maxlength="20" placeholder="e.g. Cadd9" /></label>
-          <label>Variant
-            <select id="cb-variant">
-              <option>1</option><option>2</option><option>3</option>
-              <option>4</option><option>5</option>
-            </select>
-          </label>
-          <label>Barre fret <input type="number" id="cb-barre" min="0" max="12" placeholder="(none)" /></label>
-        </div>
-        <div id="cb-fretboard" class="cb-fretboard" aria-label="Chord fretboard"></div>
-        <p class="muted">Click on a fret to press it. Click the top row to toggle muted (✕) / open (○).
-           Each string can have at most one pressed fret.</p>
-        <div class="cb-actions">
-          <pre id="cb-preview" class="cb-preview"></pre>
-          <div>
-            <button id="cb-save" class="primary">💾 Save chord</button>
-            <button id="cb-reset">Reset</button>
-          </div>
-        </div>
-      </section>
 
       <div id="chord-grid" class="chord-grid"></div>
     </section>

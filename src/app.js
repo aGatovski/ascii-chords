@@ -52,8 +52,6 @@
     updateSong(id, data)  { return this.req('PUT', '/api/songs/' + id, data); },
     deleteSong(id)        { return this.req('DELETE', '/api/songs/' + id); },
     listChords()          { return this.req('GET', '/api/chords'); },
-    addChord(data)        { return this.req('POST', '/api/chords', data); },
-    deleteChord(id)       { return this.req('DELETE', '/api/chords/' + id); },
     logout()              { return this.req('POST', '/api/auth/logout'); },
   };
 
@@ -161,8 +159,7 @@
     const def = variants[0];
     if (!def) {
       return `<div class="popover-title">${escapeHtml(chordName)}</div>` +
-             '<div class="muted">No diagram in library. ' +
-             '<a href="#chords">Add one →</a></div>';
+             '<div class="muted">No diagram in library.</div>';
     }
     const diagram = Chords.renderDiagram(chordName, def.frets, def.barre_fret);
     const notes = Chords.chordNotes(chordName, def.frets);
@@ -412,6 +409,10 @@
     ta.value = song.body || '';
     if (effectiveReadOnly) {
       ta.setAttribute('readonly', '');
+      // Hide the raw editor pane entirely in read-only view — viewers want
+      // the rendered song, not the source.
+      const editorView = document.querySelector('.editor-view');
+      if (editorView) editorView.classList.add('read-only');
       // Lock every meta input so the read-only viewer can't edit anything.
       document.querySelectorAll('.editor-meta-grid input, .editor-meta-grid select, .editor-meta-grid textarea, .editor-meta-bar input')
         .forEach(el => el.setAttribute('disabled', ''));
@@ -673,36 +674,14 @@
       const items = filter
         ? lib.filter(c => c.chord_name.toLowerCase().includes(filter))
         : lib;
-      grid.innerHTML = items.map(c => {
-        const isMine = c.user_id !== null;
-        return `
-          <div class="chord-card" data-id="${c.id}" data-mine="${isMine ? '1' : '0'}">
-            <div class="chord-card-name">
-              ${escapeHtml(c.chord_name)} <span class="muted">v${c.variant}</span>
-              ${isMine ? '<button class="link-btn chord-del" title="Delete custom chord">🗑</button>' : ''}
-            </div>
-            <pre>${escapeHtml(Chords.renderDiagram(c.chord_name, c.frets, c.barre_fret))}</pre>
+      grid.innerHTML = items.map(c => `
+        <div class="chord-card" data-id="${c.id}">
+          <div class="chord-card-name">
+            ${escapeHtml(c.chord_name)} <span class="muted">v${c.variant}</span>
           </div>
-        `;
-      }).join('');
-
-      // Wire delete buttons for user-owned chords.
-      grid.querySelectorAll('.chord-del').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-          e.stopPropagation();
-          const card = btn.closest('.chord-card');
-          const id = parseInt(card.dataset.id, 10);
-          if (!confirm('Delete this custom chord?')) return;
-          try {
-            await API.deleteChord(id);
-            // Refresh library
-            const data = await API.listChords();
-            Chords.setLibrary(data.chords);
-            render(search.value.trim().toLowerCase());
-            toast('Chord deleted', 'success');
-          } catch (err) { toast(err.message, 'error'); }
-        });
-      });
+          <pre>${escapeHtml(Chords.renderDiagram(c.chord_name, c.frets, c.barre_fret))}</pre>
+        </div>
+      `).join('');
     }
     render('');
     let t;
@@ -710,144 +689,6 @@
       clearTimeout(t);
       t = setTimeout(() => render(search.value.trim().toLowerCase()), 120);
     });
-
-    // ---- Visual chord builder ----
-    initChordBuilder(() => render(search.value.trim().toLowerCase()));
-  }
-
-  // -------- Visual chord builder --------
-  // State: frets[] indexed low-to-high (E A D G B e) matching API + library.
-  // Values: -1 = muted, 0 = open, 1..12 = pressed fret.
-  function initChordBuilder(onSaved) {
-    const toggle  = document.getElementById('chord-builder-toggle');
-    const panel   = document.getElementById('chord-builder');
-    const closeBtn= document.getElementById('cb-close');
-    const board   = document.getElementById('cb-fretboard');
-    const nameEl  = document.getElementById('cb-name');
-    const variant = document.getElementById('cb-variant');
-    const barreEl = document.getElementById('cb-barre');
-    const preview = document.getElementById('cb-preview');
-    const saveBtn = document.getElementById('cb-save');
-    const resetBtn= document.getElementById('cb-reset');
-
-    const FRET_ROWS  = 5;                                  // fret 1..5 visible
-    // Display order: high-e on the LEFT, low-E on the RIGHT — matches the
-    // existing renderDiagram convention.
-    const STRING_DISPLAY = ['e', 'B', 'G', 'D', 'A', 'E']; // index 0 = high e
-    // Maps a display column index to its low-to-high library index.
-    function displayToLibIdx(displayIdx) { return 5 - displayIdx; }
-
-    // Internal state — low-to-high
-    let frets = [-1, -1, -1, -1, -1, -1]; // start all muted
-
-    function renderBoard() {
-      const cells = [];
-      // Header row: ✕ / ○ toggles per string, click cycles muted → open → muted
-      cells.push('<div class="cb-row cb-row-status">');
-      for (let d = 0; d < 6; d++) {
-        const libIdx = displayToLibIdx(d);
-        const v = frets[libIdx];
-        const sym = v === -1 ? '✕' : v === 0 ? '○' : '·';
-        const cls = v === -1 ? 'mute' : v === 0 ? 'open' : 'fretted';
-        cells.push(`<button type="button" class="cb-status ${cls}" data-display="${d}" title="${STRING_DISPLAY[d]} string">${sym}</button>`);
-      }
-      cells.push('</div>');
-      // Fret rows
-      for (let f = 1; f <= FRET_ROWS; f++) {
-        cells.push(`<div class="cb-row cb-row-fret" data-fret="${f}">`);
-        cells.push(`<span class="cb-fret-num">${f}</span>`);
-        for (let d = 0; d < 6; d++) {
-          const libIdx = displayToLibIdx(d);
-          const pressed = frets[libIdx] === f;
-          cells.push(`<button type="button" class="cb-cell ${pressed ? 'pressed' : ''}" data-display="${d}" data-fret="${f}"></button>`);
-        }
-        cells.push('</div>');
-      }
-      // String labels at the bottom
-      cells.push('<div class="cb-row cb-row-labels"><span></span>');
-      for (let d = 0; d < 6; d++) {
-        cells.push(`<span class="cb-label">${STRING_DISPLAY[d]}</span>`);
-      }
-      cells.push('</div>');
-      board.innerHTML = cells.join('');
-      renderPreview();
-      wireCells();
-    }
-
-    function wireCells() {
-      board.querySelectorAll('.cb-cell').forEach(cell => {
-        cell.addEventListener('click', () => {
-          const d = parseInt(cell.dataset.display, 10);
-          const f = parseInt(cell.dataset.fret, 10);
-          const libIdx = displayToLibIdx(d);
-          // Click the same fret again to release the string (set to open).
-          frets[libIdx] = (frets[libIdx] === f) ? 0 : f;
-          renderBoard();
-        });
-      });
-      board.querySelectorAll('.cb-status').forEach(btn => {
-        btn.addEventListener('click', () => {
-          const d = parseInt(btn.dataset.display, 10);
-          const libIdx = displayToLibIdx(d);
-          // Cycle: pressed-fret → open → muted → open
-          if (frets[libIdx] > 0) frets[libIdx] = 0;
-          else if (frets[libIdx] === 0) frets[libIdx] = -1;
-          else frets[libIdx] = 0;
-          renderBoard();
-        });
-      });
-    }
-
-    function renderPreview() {
-      const name  = nameEl.value.trim() || 'New';
-      const barre = barreEl.value === '' ? null : parseInt(barreEl.value, 10);
-      preview.textContent = Chords.renderDiagram(name, frets, barre);
-    }
-
-    function reset() {
-      frets = [-1, -1, -1, -1, -1, -1];
-      nameEl.value = '';
-      variant.value = '1';
-      barreEl.value = '';
-      renderBoard();
-    }
-
-    toggle.addEventListener('click', () => {
-      panel.classList.toggle('hidden');
-      if (!panel.classList.contains('hidden')) renderBoard();
-    });
-    closeBtn.addEventListener('click', () => panel.classList.add('hidden'));
-    nameEl.addEventListener('input', renderPreview);
-    barreEl.addEventListener('input', renderPreview);
-    resetBtn.addEventListener('click', reset);
-
-    saveBtn.addEventListener('click', async () => {
-      const name = nameEl.value.trim();
-      if (!name) { toast('Please enter a chord name', 'error'); return; }
-      // Require at least one fretted or open string — all-muted is nonsense.
-      if (frets.every(f => f === -1)) {
-        toast('At least one string must be fretted or open', 'error');
-        return;
-      }
-      const barre = barreEl.value === '' ? null : parseInt(barreEl.value, 10);
-      try {
-        await API.addChord({
-          chord_name: name,
-          variant:    parseInt(variant.value, 10) || 1,
-          frets:      frets,
-          barre_fret: barre,
-        });
-        // Refetch library so the new shape appears in popovers and the dict.
-        const data = await API.listChords();
-        Chords.setLibrary(data.chords);
-        toast('Chord saved', 'success');
-        reset();
-        panel.classList.add('hidden');
-        if (onSaved) onSaved();
-      } catch (e) { toast(e.message, 'error'); }
-    });
-
-    renderBoard();
   }
 
   // -------- Public catalog view --------

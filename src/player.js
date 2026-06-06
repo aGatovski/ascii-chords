@@ -188,15 +188,9 @@ window.Player = (function () {
         cursor += beatInterval * 0.5;
       } else if (/^\[.+\]$/.test(line.trim())) {
         cursor += beatInterval * 0.5;
-      } else if (window.Chords && window.Chords.isChordLine(line)) {
-        cursor = scheduleChordLine(audioCtx, line, beatInterval, cursor);
-        if (i + 1 < lines.length && lines[i + 1].trim() !== ''
-            && !window.Chords.isChordLine(lines[i + 1])
-            && !/^\s*[eEBGDAd]\|/.test(lines[i + 1])
-            && !/^\[.+\]$/.test(lines[i + 1].trim())) {
-          i++;
-        }
       } else {
+        // Chord lines and lyric lines are silent — only ASCII tab blocks
+        // produce sound. Chord names are visual reference for fingering.
         cursor += beatInterval;
       }
       i++;
@@ -240,29 +234,6 @@ window.Player = (function () {
       }
     }
     return time + beatInterval * 0.25;
-  }
-
-  function scheduleChordLine(audioCtx, chordsLine, beatInterval, startTime) {
-    if (!window.Chords) return startTime + beatInterval;
-    let time = startTime;
-    const tokens = chordsLine.trim().split(/\s+/);
-    for (const tok of tokens) {
-      if (!window.Chords.isChordToken(tok)) continue;
-      const def = window.Chords.getDefault(tok);
-      if (def && def.frets) {
-        // chord library frets stored low-to-high (E A D G B e)
-        for (let s = 0; s < 6; s++) {
-          const fret = def.frets[s];
-          if (fret < 0) continue;
-          const stringName = SAMPLE_ORDER[s];   // E,A,D,G,B,e
-          // All 6 strings ring out together (block chord, not strummed)
-          playNote(audioCtx, stringName, fret, time, 0.15);
-        }
-      }
-      if (metronomeOn) metronomeTick(audioCtx, time, false);
-      time += beatInterval;
-    }
-    return time;
   }
 
   // ---- Visual beat pulse -------------------------------------------------
