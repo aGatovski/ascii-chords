@@ -251,6 +251,10 @@
     { match: /^#help$/,                handler: viewHelp },
   ];
   function navigate() {
+    // The tab editor modal lives outside #view-root, so a route change
+    // wouldn't otherwise clear it. Hide it on every navigation.
+    const tabModal = document.getElementById('tab-editor-modal');
+    if (tabModal) tabModal.classList.add('hidden');
     const hash = window.location.hash || '#library';
     for (const r of routes) {
       const m = hash.match(r.match);
@@ -619,8 +623,8 @@
     document.getElementById('print-btn').addEventListener('click', () => window.print());
     document.getElementById('delete-btn').addEventListener('click', deleteCurrentSong);
 
-    // Tab editor
-    document.getElementById('tab-editor-btn').addEventListener('click', openTabEditor);
+    // Tab editor — handled by a document-level delegated listener in
+    // wireTabEditorModal() so it survives editor template re-mounts.
   }
 
   // -------- Tab editor modal --------
@@ -763,8 +767,12 @@
   }
 
   // Wire the modal once globally — it's the same DOM element regardless of
-  // which song is open in the editor.
-  document.addEventListener('DOMContentLoaded', () => {
+  // which song is open in the editor. The modal markup is in static
+  // index.html so it's already in the DOM when this IIFE runs; gating on
+  // DOMContentLoaded is unsafe because the script tag at the end of <body>
+  // can execute after that event has already fired (in which case the
+  // listener would never run).
+  function wireTabEditorModal() {
     const closeBtn  = document.getElementById('tab-editor-close');
     const clearBtn  = document.getElementById('tab-editor-clear');
     const insertBtn = document.getElementById('tab-editor-insert');
@@ -773,16 +781,32 @@
     if (clearBtn)  clearBtn.addEventListener('click', clearTabState);
     if (insertBtn) insertBtn.addEventListener('click', insertTabAtCursor);
     if (backdrop) {
+      // Make sure it starts hidden, regardless of any stale state from
+      // template hydration during route changes.
+      backdrop.classList.add('hidden');
       backdrop.addEventListener('click', (e) => {
         if (e.target === backdrop) closeTabEditor();
       });
     }
+    // Delegated fallback for the open button: the editor template is
+    // re-mounted on every navigation, so a per-mount listener may be lost
+    // if wireToolbar fails partway through. This delegated listener stays
+    // attached for the lifetime of the page.
+    document.addEventListener('click', (e) => {
+      const t = e.target.closest && e.target.closest('#tab-editor-btn');
+      if (t) openTabEditor();
+    });
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape' && backdrop && !backdrop.classList.contains('hidden')) {
         closeTabEditor();
       }
     });
-  });
+  }
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', wireTabEditorModal);
+  } else {
+    wireTabEditorModal();
+  }
 
   async function saveSong() {
     const status = document.getElementById('save-status');
@@ -986,4 +1010,5 @@
   window.AsciiChords = { parseSongBody, renderParsed, applyTransposition };
 
   document.addEventListener('DOMContentLoaded', boot);
+  if (document.readyState !== 'loading') boot();
 })();
