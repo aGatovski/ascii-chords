@@ -585,6 +585,19 @@
     document.getElementById('meta-tuning').addEventListener('change', e => {
       if (window.Player) window.Player.setTuning(e.target.value);
     });
+    // Instrument picker — persisted per-browser so the choice survives reloads.
+    const instSel = document.getElementById('instrument-select');
+    if (instSel) {
+      const saved = localStorage.getItem('ac.instrument');
+      if (saved && instSel.querySelector('option[value="' + saved + '"]')) {
+        instSel.value = saved;
+      }
+      if (window.Player) window.Player.setInstrument(instSel.value);
+      instSel.addEventListener('change', e => {
+        localStorage.setItem('ac.instrument', e.target.value);
+        if (window.Player) window.Player.setInstrument(e.target.value);
+      });
+    }
 
     // Autoscroll
     const asBtn      = document.getElementById('autoscroll-btn');

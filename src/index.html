@@ -133,6 +133,13 @@
           <label>BPM <input type="range" id="bpm-slider" min="40" max="240" value="120" /></label>
           <input type="number" id="bpm-display" min="40" max="240" value="120" />
           <label><input type="checkbox" id="metronome-toggle" /> Metronome</label>
+          <label>Instrument
+            <select id="instrument-select">
+              <option value="synth">Synth</option>
+              <option value="acoustic" selected>Acoustic</option>
+              <option value="electric">Electric</option>
+            </select>
+          </label>
         </div>
         <div class="toolbar-row">
           <button id="autoscroll-btn">↕ Autoscroll</button>

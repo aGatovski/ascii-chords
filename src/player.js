@@ -1,12 +1,15 @@
 /* ============================================================
    player.js — Web Audio playback engine
 
-   Sample-first: loads 6 open-string acoustic guitar recordings
-   from /sounds/{E2,A2,D3,G3,B3,E4}.mp3 on first user interaction,
-   then plays fretted notes by pitch-shifting the matching sample
+   Sample-first: per-instrument folders under /sounds/<instrument>/
+   each contain 6 open-string recordings (E2, A2, D3, G3, B3, E4).
+   Switching instruments lazy-loads its sample pack on first use.
+   Fretted notes are played by pitch-shifting the matching sample
    via AudioBufferSourceNode.playbackRate = 2^(fret/12).
 
-   Falls back to sawtooth synthesis if samples are unavailable.
+   The "Synth" instrument bypasses samples entirely and uses the
+   sawtooth pluck path — also acts as fallback when an instrument's
+   samples fail to load.
    ============================================================ */
 
 window.Player = (function () {
@@ -21,14 +24,18 @@ window.Player = (function () {
   };
   // Order matches the sample files E2..E4 (low to high)
   const SAMPLE_ORDER = ['E', 'A', 'D', 'G', 'B', 'e'];
-  const SAMPLE_FILES = {
-    E: 'sounds/E2.mp3',
-    A: 'sounds/A2.mp3',
-    D: 'sounds/D3.mp3',
-    G: 'sounds/G3.mp3',
-    B: 'sounds/B3.mp3',
-    e: 'sounds/E4.mp3',
+  // Filename per string letter — same set in every instrument folder.
+  const SAMPLE_FILENAMES = {
+    E: 'E2.mp3', A: 'A2.mp3', D: 'D3.mp3',
+    G: 'G3.mp3', B: 'B3.mp3', e: 'E4.mp3',
   };
+  // Instrument name → folder under /sounds/. "synth" is special: no folder,
+  // always falls through to the sawtooth oscillator.
+  const INSTRUMENT_FOLDERS = {
+    acoustic: 'sounds/acoustic',
+    electric: 'sounds/electric',
+  };
+  const DEFAULT_INSTRUMENT = 'acoustic';
 
   // Tuning presets — semitone offsets per string in SAMPLE_ORDER (low-to-high
   // E A D G B e). 0 = standard; negative = flatten; positive = sharpen.
@@ -59,12 +66,13 @@ window.Player = (function () {
   let isPaused = false;
   let activeBeatTimer = null;
   let currentTuning = 'Standard';
+  let currentInstrument = DEFAULT_INSTRUMENT;
 
   // ---- Sample cache ------------------------------------------------------
-  // buffers[stringLetter] = AudioBuffer | null. Null = synth-only fallback.
-  const buffers = {};
-  let samplesLoadingPromise = null;
-  let samplesReady = false;
+  // bufferPacks[instrument] = { buffers: { stringLetter: AudioBuffer|null },
+  //                              loadingPromise, ready }
+  // "synth" is never cached; it falls straight through to pluckSynth.
+  const bufferPacks = {};
 
   function getCtx() {
     if (!ctx) ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -80,30 +88,42 @@ window.Player = (function () {
   }
 
   // ---- Sample loading ----------------------------------------------------
-  async function loadSamples() {
-    if (samplesReady) return;
-    if (samplesLoadingPromise) return samplesLoadingPromise;
+  // Loads the 6 sample files for `instrument` (one network round-trip per
+  // string, in parallel). Re-entrant: a second call while the first is in
+  // flight returns the same promise.
+  async function loadSamples(instrument) {
+    instrument = instrument || currentInstrument;
+    if (instrument === 'synth') return;
+    if (!INSTRUMENT_FOLDERS[instrument]) return;
+
+    if (!bufferPacks[instrument]) {
+      bufferPacks[instrument] = { buffers: {}, loadingPromise: null, ready: false };
+    }
+    const pack = bufferPacks[instrument];
+    if (pack.ready) return;
+    if (pack.loadingPromise) return pack.loadingPromise;
 
     const audioCtx = getCtx();
-    samplesLoadingPromise = (async () => {
+    const folder = INSTRUMENT_FOLDERS[instrument];
+    pack.loadingPromise = (async () => {
       const tasks = SAMPLE_ORDER.map(async (letter) => {
         try {
-          const r = await fetch(SAMPLE_FILES[letter]);
+          const r = await fetch(folder + '/' + SAMPLE_FILENAMES[letter]);
           if (!r.ok) throw new Error('HTTP ' + r.status);
           const arr = await r.arrayBuffer();
           const buf = await new Promise((resolve, reject) =>
             audioCtx.decodeAudioData(arr.slice(0), resolve, reject)
           );
-          buffers[letter] = buf;
+          pack.buffers[letter] = buf;
         } catch (e) {
-          console.warn('[player] sample load failed for', letter, e.message);
-          buffers[letter] = null;
+          console.warn('[player]', instrument, 'sample failed for', letter, e.message);
+          pack.buffers[letter] = null;
         }
       });
       await Promise.all(tasks);
-      samplesReady = SAMPLE_ORDER.some(l => buffers[l]);
+      pack.ready = SAMPLE_ORDER.some(l => pack.buffers[l]);
     })();
-    return samplesLoadingPromise;
+    return pack.loadingPromise;
   }
 
   // ---- Note playback -----------------------------------------------------
@@ -114,7 +134,8 @@ window.Player = (function () {
   function playNote(audioCtx, stringName, fret, startTime, gain = 0.18) {
     const offset = tuningOffsets(currentTuning)[stringIndex(stringName)];
     const effectiveFret = fret + offset;
-    const buf = buffers[stringName];
+    const pack = currentInstrument !== 'synth' ? bufferPacks[currentInstrument] : null;
+    const buf = pack && pack.ready ? pack.buffers[stringName] : null;
     if (buf) {
       const src = audioCtx.createBufferSource();
       const g   = audioCtx.createGain();
@@ -263,7 +284,7 @@ window.Player = (function () {
     if (songTuning) currentTuning = songTuning;
     // Ensure samples are loaded before scheduling. The user gesture (Play
     // click) also unblocks the AudioContext, so this is the right moment.
-    await loadSamples();
+    await loadSamples(currentInstrument);
     isPlaying = true; isPaused = false;
     scheduleSong(text, songBpm);
     startBeatHighlight();
@@ -288,6 +309,12 @@ window.Player = (function () {
 
   function setBpm(v)        { bpm = v; }
   function setTuning(name)  { currentTuning = name || 'Standard'; }
+  function setInstrument(name) {
+    currentInstrument = (name && (INSTRUMENT_FOLDERS[name] || name === 'synth'))
+      ? name : DEFAULT_INSTRUMENT;
+    // Kick off a load now so the first Play press doesn't wait on the network.
+    if (currentInstrument !== 'synth') loadSamples(currentInstrument);
+  }
   function setMetronome(on) {
     metronomeOn = !!on;
     if (!metronomeOn) {
@@ -301,5 +328,5 @@ window.Player = (function () {
     }
   }
 
-  return { play, pause, stop, setBpm, setTuning, setMetronome, loadSamples };
+  return { play, pause, stop, setBpm, setTuning, setMetronome, setInstrument, loadSamples };
 })();
