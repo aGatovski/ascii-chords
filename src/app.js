@@ -605,7 +605,171 @@
     document.getElementById('export-txt-btn').addEventListener('click', () => exportSong('txt'));
     document.getElementById('print-btn').addEventListener('click', () => window.print());
     document.getElementById('delete-btn').addEventListener('click', deleteCurrentSong);
+
+    // Tab editor
+    document.getElementById('tab-editor-btn').addEventListener('click', openTabEditor);
   }
+
+  // -------- Tab editor modal --------
+  // 6 strings × 8 columns. Display order matches written tab:
+  // row 0 = high e (top), row 5 = low E (bottom).
+  const TAB_STRINGS = ['e', 'B', 'G', 'D', 'A', 'E'];
+  const TAB_COLS    = 8;
+  let tabState = null;  // 6×TAB_COLS array of strings ('', '0'..'24', 'x')
+
+  function openTabEditor() {
+    const modal = document.getElementById('tab-editor-modal');
+    if (!modal) return;
+    if (!tabState) {
+      tabState = TAB_STRINGS.map(() => Array(TAB_COLS).fill(''));
+    }
+    renderTabGrid();
+    modal.classList.remove('hidden');
+    // Focus the first input for keyboard-friendly entry
+    const first = modal.querySelector('input.tab-cell');
+    if (first) first.focus();
+  }
+
+  function closeTabEditor() {
+    document.getElementById('tab-editor-modal').classList.add('hidden');
+  }
+
+  function renderTabGrid() {
+    const grid = document.getElementById('tab-editor-grid');
+    const html = [];
+    for (let r = 0; r < 6; r++) {
+      html.push('<div class="tab-row">');
+      html.push(`<span class="tab-string">${TAB_STRINGS[r]}|</span>`);
+      for (let c = 0; c < TAB_COLS; c++) {
+        const v = tabState[r][c];
+        html.push(
+          `<input type="text" class="tab-cell" data-r="${r}" data-c="${c}" ` +
+          `maxlength="2" value="${v}" />`
+        );
+      }
+      html.push('</div>');
+    }
+    grid.innerHTML = html.join('');
+
+    grid.querySelectorAll('input.tab-cell').forEach(inp => {
+      inp.addEventListener('input', () => {
+        const r = parseInt(inp.dataset.r, 10);
+        const c = parseInt(inp.dataset.c, 10);
+        tabState[r][c] = sanitizeTabCell(inp.value);
+        // Keep displayed value in sync with sanitised state, without
+        // stealing the cursor on every keystroke.
+        if (inp.value !== tabState[r][c]) inp.value = tabState[r][c];
+        renderTabPreview();
+      });
+      inp.addEventListener('keydown', (e) => {
+        // Arrow keys to move between cells — quality-of-life for fast entry.
+        const r = parseInt(inp.dataset.r, 10);
+        const c = parseInt(inp.dataset.c, 10);
+        let nr = r, nc = c;
+        if (e.key === 'ArrowRight') nc = Math.min(TAB_COLS - 1, c + 1);
+        else if (e.key === 'ArrowLeft')  nc = Math.max(0, c - 1);
+        else if (e.key === 'ArrowDown')  nr = Math.min(5, r + 1);
+        else if (e.key === 'ArrowUp')    nr = Math.max(0, r - 1);
+        else return;
+        e.preventDefault();
+        const next = grid.querySelector(`input[data-r="${nr}"][data-c="${nc}"]`);
+        if (next) { next.focus(); next.select(); }
+      });
+    });
+
+    renderTabPreview();
+  }
+
+  function sanitizeTabCell(raw) {
+    const s = (raw || '').trim().toLowerCase();
+    if (s === '') return '';
+    if (s === 'x') return 'x';
+    // Numeric fret: clamp to 0..24
+    const n = parseInt(s, 10);
+    if (isNaN(n)) return '';
+    return String(Math.max(0, Math.min(24, n)));
+  }
+
+  function tabStateToAscii() {
+    // Each column is rendered with width = max width of any cell in that
+    // column (so 12s and single digits stay aligned). Empty cells become
+    // "-" of the same width. Separator between cells is one "-".
+    const colWidths = [];
+    for (let c = 0; c < TAB_COLS; c++) {
+      let w = 1;
+      for (let r = 0; r < 6; r++) {
+        const v = tabState[r][c];
+        if (v.length > w) w = v.length;
+      }
+      colWidths.push(w);
+    }
+    const lines = [];
+    for (let r = 0; r < 6; r++) {
+      let line = TAB_STRINGS[r] + '|';
+      for (let c = 0; c < TAB_COLS; c++) {
+        const w = colWidths[c];
+        const v = tabState[r][c];
+        const cell = v === '' ? '-'.repeat(w) : v.padStart(w, '-');
+        line += '-' + cell;
+      }
+      line += '-|';
+      lines.push(line);
+    }
+    return lines.join('\n');
+  }
+
+  function renderTabPreview() {
+    document.getElementById('tab-editor-preview').textContent = tabStateToAscii();
+  }
+
+  function clearTabState() {
+    tabState = TAB_STRINGS.map(() => Array(TAB_COLS).fill(''));
+    renderTabGrid();
+  }
+
+  function insertTabAtCursor() {
+    const ascii = tabStateToAscii();
+    // Surround with blank lines so the parser detects it as a tab block
+    // even when neighbouring content is lyrics.
+    const ta = document.getElementById('raw-editor');
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end   = ta.selectionEnd;
+    const v = ta.value;
+    const before = v.slice(0, start);
+    const after  = v.slice(end);
+    const needLeadingBreak  = before.length > 0 && !before.endsWith('\n');
+    const needTrailingBreak = after.length > 0 && !after.startsWith('\n');
+    const insert = (needLeadingBreak ? '\n' : '') + ascii +
+                   (needTrailingBreak ? '\n' : '');
+    ta.value = before + insert + after;
+    ta.selectionStart = ta.selectionEnd = start + insert.length;
+    ta.dispatchEvent(new Event('input'));
+    closeTabEditor();
+    toast('Tab inserted', 'success');
+  }
+
+  // Wire the modal once globally — it's the same DOM element regardless of
+  // which song is open in the editor.
+  document.addEventListener('DOMContentLoaded', () => {
+    const closeBtn  = document.getElementById('tab-editor-close');
+    const clearBtn  = document.getElementById('tab-editor-clear');
+    const insertBtn = document.getElementById('tab-editor-insert');
+    const backdrop  = document.getElementById('tab-editor-modal');
+    if (closeBtn)  closeBtn.addEventListener('click', closeTabEditor);
+    if (clearBtn)  clearBtn.addEventListener('click', clearTabState);
+    if (insertBtn) insertBtn.addEventListener('click', insertTabAtCursor);
+    if (backdrop) {
+      backdrop.addEventListener('click', (e) => {
+        if (e.target === backdrop) closeTabEditor();
+      });
+    }
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && backdrop && !backdrop.classList.contains('hidden')) {
+        closeTabEditor();
+      }
+    });
+  });
 
   async function saveSong() {
     const status = document.getElementById('save-status');

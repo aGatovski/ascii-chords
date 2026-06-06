@@ -478,6 +478,97 @@ input:focus, select:focus, textarea:focus {
 }
 
 /* ============================================================
+   Modal (tab editor)
+   ============================================================ */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 250;
+  animation: toast-in 0.15s ease-out;
+}
+.modal-backdrop.hidden { display: none; }
+.modal {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1.2rem;
+  max-width: 720px;
+  width: 95%;
+  max-height: 90vh;
+  overflow: auto;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.6);
+}
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+.modal-header h3 { margin: 0; color: var(--accent-2); }
+.modal-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-end;
+  margin-top: 0.8rem;
+}
+
+/* Tab editor grid */
+.tab-grid {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.6rem;
+  margin: 0.6rem 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-family: var(--mono);
+  overflow-x: auto;
+}
+.tab-row {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+.tab-string {
+  width: 1.6rem;
+  text-align: right;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-size: 0.95em;
+  flex-shrink: 0;
+}
+.tab-cell {
+  width: 2.4rem;
+  height: 1.9rem;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 0.9em;
+  padding: 0.1em 0.2em;
+  border-radius: 4px;
+}
+.tab-cell:focus {
+  background: var(--panel);
+  outline: 2px solid var(--accent);
+}
+.tab-grid-preview {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 0.7rem 0.9rem;
+  font-family: var(--mono);
+  font-size: 13px;
+  white-space: pre;
+  overflow-x: auto;
+  margin: 0.4rem 0;
+  color: var(--text);
+}
+
+/* ============================================================
    Print
    ============================================================ */
 @media print {

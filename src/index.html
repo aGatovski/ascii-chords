@@ -32,6 +32,27 @@
   <!-- Toast host -->
   <div id="toast" class="toast hidden"></div>
 
+  <!-- Tab editor modal -->
+  <div id="tab-editor-modal" class="modal-backdrop hidden">
+    <div class="modal">
+      <header class="modal-header">
+        <h3>📐 Tab editor</h3>
+        <button id="tab-editor-close" class="link-btn">close</button>
+      </header>
+      <p class="muted">
+        Click a cell and type a fret number (0–24), <code>x</code> for muted,
+        or leave it blank. Strings are labelled high-e on top, low-E on the
+        bottom — same as written tab.
+      </p>
+      <div id="tab-editor-grid" class="tab-grid"></div>
+      <pre id="tab-editor-preview" class="tab-grid-preview"></pre>
+      <div class="modal-actions">
+        <button id="tab-editor-clear">Clear</button>
+        <button id="tab-editor-insert" class="primary">Insert at cursor</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Templates -->
   <template id="tpl-library">
     <section class="library-view">
@@ -126,6 +147,7 @@
           <span class="muted" id="capo-info"></span>
         </div>
         <div class="toolbar-row">
+          <button id="tab-editor-btn">📐 Insert tab</button>
           <button id="save-btn"   class="primary">💾 Save</button>
           <button id="export-json-btn">⬇ Export JSON</button>
           <button id="export-txt-btn">⬇ Export TXT</button>
