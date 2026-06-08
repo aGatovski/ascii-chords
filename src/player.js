@@ -7,6 +7,12 @@
    Fretted notes are played by pitch-shifting the matching sample
    via AudioBufferSourceNode.playbackRate = 2^(fret/12).
 
+   Two scheduling paths:
+   - Tab blocks: each column → an instant in time (precise).
+   - Chord lines: each token → one beat, played as a downstrum
+     across the strings using the chord library's first variant.
+     Unknown chord names are skipped silently.
+
    The "Synth" instrument bypasses samples entirely and uses the
    sawtooth pluck path — also acts as fallback when an instrument's
    samples fail to load.
@@ -30,10 +36,11 @@ window.Player = (function () {
     G: 'G3.mp3', B: 'B3.mp3', e: 'E4.mp3',
   };
   // Instrument name → folder under /sounds/. "synth" is special: no folder,
-  // always falls through to the sawtooth oscillator.
+  // always falls through to the sawtooth oscillator. "electric" is currently
+  // bundled empty, so it's omitted here — selecting it in the UI is disabled,
+  // and any stale localStorage value falls back to DEFAULT_INSTRUMENT.
   const INSTRUMENT_FOLDERS = {
     acoustic: 'sounds/acoustic',
-    electric: 'sounds/electric',
   };
   const DEFAULT_INSTRUMENT = 'acoustic';
 
@@ -209,14 +216,49 @@ window.Player = (function () {
         cursor += beatInterval * 0.5;
       } else if (/^\[.+\]$/.test(line.trim())) {
         cursor += beatInterval * 0.5;
+      } else if (window.Chords && window.Chords.isChordLine(line)) {
+        // Chord lines: schedule a downstrum per token, one beat each.
+        // Unknown chord names (no shape in the library) advance the cursor
+        // silently so the song's timing doesn't drift.
+        cursor = scheduleChordLine(audioCtx, line, beatInterval, cursor);
       } else {
-        // Chord lines and lyric lines are silent — only ASCII tab blocks
-        // produce sound. Chord names are visual reference for fingering.
+        // Lyric lines have no audio; skip a beat so structure is preserved.
         cursor += beatInterval;
       }
       i++;
     }
     return cursor - startAt;
+  }
+
+  // Schedules a strum for every chord token on a chord line. Each token
+  // takes one beat. The downstrum spreads the 6 strings over ~72 ms so it
+  // sounds like a strum, not a piano chord.
+  function scheduleChordLine(audioCtx, line, beatInterval, startTime) {
+    const tokens = line.match(window.Chords.CHORD_GLOBAL_RE) || [];
+    let time = startTime;
+    for (const tok of tokens) {
+      scheduleChordStrum(audioCtx, tok, time);
+      time += beatInterval;
+    }
+    if (metronomeOn && tokens.length > 0) {
+      for (let b = 0; b < tokens.length; b++) {
+        metronomeTick(audioCtx, startTime + b * beatInterval, b === 0);
+      }
+    }
+    return time;
+  }
+
+  function scheduleChordStrum(audioCtx, chordName, time) {
+    const def = window.Chords.getDefault(chordName);
+    if (!def) return;                       // unknown shape — silent
+    const frets = def.frets;                // low-to-high E A D G B e, -1 = mute
+    const STRUM_STEP = 0.012;               // ~12ms between adjacent strings
+    for (let i = 0; i < 6; i++) {
+      const f = frets[i];
+      if (f == null || f < 0) continue;
+      // SAMPLE_ORDER is also low-to-high so indexing matches.
+      playNote(audioCtx, SAMPLE_ORDER[i], f, time + i * STRUM_STEP, 0.15);
+    }
   }
 
   function scheduleTabBlock(audioCtx, blockLines, beatInterval, startTime) {

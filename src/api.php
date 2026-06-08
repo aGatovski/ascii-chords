@@ -94,7 +94,14 @@ try {
             json_response(['error' => 'Not found', 'path' => $uri], 404);
     }
 } catch (Throwable $e) {
-    json_response(['error' => 'Server error', 'detail' => $e->getMessage()], 500);
+    // Always log the full detail server-side; expose it to the client only
+    // when APP_DEBUG=1 is set. Production stays opaque.
+    error_log('[api] ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
+    $body = ['error' => 'Server error'];
+    if (getenv('APP_DEBUG') === '1') {
+        $body['detail'] = $e->getMessage();
+    }
+    json_response($body, 500);
 }
 
 // ---------- Auth -----------------------------------------------------------

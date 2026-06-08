@@ -12,15 +12,16 @@
       <a href="#library">🎸 ASCII Chords</a>
     </div>
     <nav>
-      <a href="#library">Library</a>
-      <a href="#song/new">+ New song</a>
+      <a href="#library" data-auth-only>Library</a>
+      <a href="#song/new" data-auth-only>+ New song</a>
       <a href="#catalog">Public catalog</a>
       <a href="#chords">Chord dictionary</a>
       <a href="#help">Help</a>
     </nav>
     <div class="user-menu">
       <span id="user-label" class="muted"></span>
-      <button id="logout-btn" class="link-btn">Sign out</button>
+      <button id="logout-btn" class="link-btn" data-auth-only>Sign out</button>
+      <a id="signin-link" href="login.html" class="link-btn" data-guest-only>Sign in</a>
     </div>
   </header>
 
@@ -73,6 +74,8 @@
             <option value="artist_asc">Artist A–Z</option>
             <option value="difficulty">By difficulty</option>
           </select>
+          <button id="import-btn" type="button">⬆ Import</button>
+          <input type="file" id="import-file" accept=".json,.txt" hidden />
           <a class="primary" href="#song/new">+ New song</a>
         </div>
       </header>
@@ -137,7 +140,7 @@
             <select id="instrument-select">
               <option value="synth">Synth</option>
               <option value="acoustic" selected>Acoustic</option>
-              <option value="electric">Electric</option>
+              <option value="electric" disabled title="Samples not yet bundled">Electric (coming soon)</option>
             </select>
           </label>
         </div>
@@ -252,6 +255,18 @@ E|--x--x--x--x--|</pre>
       <p>Set the song's tuning (Standard, Drop D, Open G, Open D, DADGAD, Half-Step
          Down) in the metadata grid. The Play button respects it: each string is
          pitch-shifted so the open strings sound at their correct retuned pitch.</p>
+
+      <h3>Playback model</h3>
+      <p>The Play button schedules audio in two ways:</p>
+      <ul>
+        <li><strong>Tab blocks</strong> — every column becomes an instant in
+          time, so frets sound exactly when written. This is the precise path.</li>
+        <li><strong>Chord lines</strong> — every chord token gets one beat and
+          plays as a downstrum using the first variant in the chord library.
+          Tokens with no shape in the library are skipped silently.</li>
+      </ul>
+      <p>If you want strict timing, write your part as a tab block; chord-line
+         playback is a sketch, not a performance.</p>
 
       <h3>Capo &amp; transposition</h3>
       <p>Capo is informational — it tells the parser what fret to assume for the

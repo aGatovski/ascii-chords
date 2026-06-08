@@ -52,6 +52,11 @@
     updateSong(id, data)  { return this.req('PUT', '/api/songs/' + id, data); },
     deleteSong(id)        { return this.req('DELETE', '/api/songs/' + id); },
     listChords()          { return this.req('GET', '/api/chords'); },
+    importSong(file)      {
+      const fd = new FormData();
+      fd.append('file', file);
+      return this.req('POST', '/api/songs/import', fd);
+    },
     logout()              { return this.req('POST', '/api/auth/logout'); },
   };
 
@@ -250,12 +255,23 @@
     { match: /^#catalog$/,             handler: viewCatalog },
     { match: /^#help$/,                handler: viewHelp },
   ];
+  // Routes a signed-out visitor is allowed to use. Everything else bounces
+  // through login.html.
+  const PUBLIC_ROUTES = [/^#catalog$/, /^#song\/\d+$/, /^#chords$/, /^#help$/];
+  function isPublicRoute(hash) {
+    return PUBLIC_ROUTES.some(re => re.test(hash));
+  }
+  let _isGuest = false;
   function navigate() {
     // The tab editor modal lives outside #view-root, so a route change
     // wouldn't otherwise clear it. Hide it on every navigation.
     const tabModal = document.getElementById('tab-editor-modal');
     if (tabModal) tabModal.classList.add('hidden');
     const hash = window.location.hash || '#library';
+    if (_isGuest && !isPublicRoute(hash)) {
+      window.location.href = 'login.html';
+      return;
+    }
     for (const r of routes) {
       const m = hash.match(r.match);
       if (m) { r.handler(m); return; }
@@ -294,6 +310,29 @@
     });
     diff.addEventListener('change', refresh);
     sort.addEventListener('change', refresh);
+
+    // Import flow: POST the file, prefill an unsaved draft from the parsed
+    // payload, navigate to #song/new — the editor restores from draft on mount.
+    const importBtn  = document.getElementById('import-btn');
+    const importFile = document.getElementById('import-file');
+    if (importBtn && importFile) {
+      importBtn.addEventListener('click', () => importFile.click());
+      importFile.addEventListener('change', async () => {
+        const file = importFile.files && importFile.files[0];
+        if (!file) return;
+        try {
+          const res = await API.importSong(file);
+          if (!res || !res.parsed) throw new Error('Import returned no payload');
+          writeDraft(res.parsed);
+          toast('Imported — review and save', 'success');
+          window.location.hash = '#song/new';
+        } catch (e) {
+          toast('Import failed: ' + e.message, 'error');
+        } finally {
+          importFile.value = '';
+        }
+      });
+    }
 
     refresh();
   }
@@ -403,8 +442,9 @@
         toast('Restored unsaved draft', '');
       }
     }
-    // Force read-only when the current user does not own the song.
-    const effectiveReadOnly = !!opts.readOnly || (song.id && song.is_owner === false);
+    // Force read-only when the current user does not own the song, or
+    // when the visitor is signed-out (guests can never edit).
+    const effectiveReadOnly = !!opts.readOnly || _isGuest || (song.id && song.is_owner === false);
     _editorState = { song, semitones: 0, useFlats: false, readOnly: effectiveReadOnly };
 
     fillMetaForm(song);
@@ -425,11 +465,17 @@
         const b = document.getElementById(id);
         if (b) b.style.display = 'none';
       });
-      // Show a banner when viewing someone else's public song.
-      if (song.id && song.is_owner === false) {
+      // Show a banner when viewing someone else's public song, or any
+      // song while signed out.
+      if (_isGuest || (song.id && song.is_owner === false)) {
         const banner = document.createElement('div');
         banner.className = 'readonly-banner';
-        banner.textContent = '👁 Viewing a public song from the catalog. You cannot edit or save changes.';
+        if (_isGuest) {
+          banner.innerHTML = '👁 Viewing a public song. ' +
+            '<a href="login.html">Sign in</a> to save your own songs.';
+        } else {
+          banner.textContent = '👁 Viewing a public song from the catalog. You cannot edit or save changes.';
+        }
         const view = document.querySelector('.editor-view');
         if (view) view.insertBefore(banner, view.firstChild);
       }
@@ -978,26 +1024,44 @@
 
   // -------- Boot --------
   async function boot() {
-    // Auth gate
+    // Auth gate. Guests are allowed on the public-facing routes (catalog,
+    // public song view, chord dictionary, help); anything else redirects.
+    let me = { user: null };
     try {
-      const me = await API.me();
-      if (!me.user) {
+      me = await API.me();
+    } catch (e) { /* fall through to guest handling */ }
+
+    if (!me.user) {
+      const hash = window.location.hash || '';
+      if (hash === '' || hash === '#' || hash === '#library') {
+        // Land guests on the catalog instead of redirecting to login —
+        // the catalog is the public face of the site.
+        _isGuest = true;
+        document.body.classList.add('guest-mode');
+        window.location.hash = '#catalog';
+      } else if (!isPublicRoute(hash)) {
         window.location.href = 'login.html';
         return;
+      } else {
+        _isGuest = true;
+        document.body.classList.add('guest-mode');
       }
+    } else {
       document.getElementById('user-label').textContent = me.user.username;
-    } catch (e) {
-      window.location.href = 'login.html';
-      return;
     }
 
-    // Logout
-    document.getElementById('logout-btn').addEventListener('click', async () => {
-      try { await API.logout(); } catch (e) {}
-      window.location.href = 'login.html';
-    });
+    // Logout (only meaningful for signed-in users; safe no-op otherwise)
+    const logoutBtn = document.getElementById('logout-btn');
+    if (logoutBtn) {
+      logoutBtn.addEventListener('click', async () => {
+        try { await API.logout(); } catch (e) {}
+        window.location.href = 'login.html';
+      });
+    }
 
-    // Pre-fetch chord library so popovers + dictionary work without a round-trip
+    // Pre-fetch chord library so popovers + dictionary work without a round-trip.
+    // The endpoint requires auth — guests just get an empty library, which is fine
+    // for catalog browsing (cards don't render diagrams).
     try {
       const data = await API.listChords();
       Chords.setLibrary(data.chords);

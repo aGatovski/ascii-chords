@@ -40,7 +40,14 @@ by [`gleitz/midi-js-soundfonts`](https://github.com/gleitz/midi-js-soundfonts).
 
 ## Electric samples
 
-`electric/` is empty by default. Drop in 6 same-named MP3s (E2, A2, D3, G3,
-B3, E4) and the **Electric** option in the instrument picker will play
-them. A clean source is the same midi-js-soundfonts repo, patch
-`electric_guitar_clean` or `electric_guitar_jazz`.
+`electric/` is empty by default, and the **Electric** option in the instrument
+picker is currently *disabled* in the UI (`index.html`) and removed from
+`INSTRUMENT_FOLDERS` in `player.js`. To re-enable it:
+
+1. Drop 6 same-named MP3s (E2, A2, D3, G3, B3, E4) into `electric/`. A clean
+   source is the same midi-js-soundfonts repo, patch `electric_guitar_clean`
+   or `electric_guitar_jazz`.
+2. Add `electric: 'sounds/electric'` back to `INSTRUMENT_FOLDERS` in
+   `player.js`.
+3. Remove the `disabled` attribute from the `<option value="electric">` in
+   `index.html`.

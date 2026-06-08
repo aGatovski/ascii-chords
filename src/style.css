@@ -408,6 +408,13 @@ input:focus, select:focus, textarea:focus {
   margin-bottom: 0.6rem;
   color: var(--chord);
 }
+.readonly-banner a { color: var(--chord); text-decoration: underline; }
+
+/* Guest-mode visibility toggles. data-auth-only hides for signed-out
+   visitors; data-guest-only is the inverse — only shown when guest. */
+[data-guest-only] { display: none; }
+body.guest-mode [data-auth-only] { display: none; }
+body.guest-mode [data-guest-only] { display: inline-flex; }
 
 /* Inline checkbox label inside the meta grid (overrides the column layout
    so the checkbox sits next to its caption instead of stacked above it). */
