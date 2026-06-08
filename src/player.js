@@ -30,17 +30,51 @@ window.Player = (function () {
   };
   // Order matches the sample files E2..E4 (low to high)
   const SAMPLE_ORDER = ['E', 'A', 'D', 'G', 'B', 'e'];
-  // Filename per string letter — same set in every instrument folder.
-  const SAMPLE_FILENAMES = {
+  // Default filename per string letter — used when an instrument's
+  // SAMPLE_FILES map doesn't override it. The acoustic pack's filenames
+  // match the open-string pitches exactly, so no override is needed.
+  const SAMPLE_FILENAMES_DEFAULT = {
     E: 'E2.mp3', A: 'A2.mp3', D: 'D3.mp3',
     G: 'G3.mp3', B: 'B3.mp3', e: 'E4.mp3',
   };
+  // Per-instrument filename + pitch-correction overrides. The electric pack
+  // (tonejs-instruments) ships pitches that don't all match standard tuning
+  // open strings — we re-use the closest available file per string and apply
+  // a semitone correction so playbackRate lands on the true open pitch.
+  // pitchOffset is in semitones: positive = sample is BELOW target, so play
+  // it back faster; negative = sample is ABOVE target, slow it down.
+  const SAMPLE_FILES = {
+    acoustic: {
+      E: { file: 'E2.mp3', pitchOffset: 0 },
+      A: { file: 'A2.mp3', pitchOffset: 0 },
+      D: { file: 'D3.mp3', pitchOffset: 0 },
+      G: { file: 'G3.mp3', pitchOffset: 0 },
+      B: { file: 'B3.mp3', pitchOffset: 0 },
+      e: { file: 'E4.mp3', pitchOffset: 0 },
+    },
+    'acoustic-tonejs': {
+      E: { file: 'E2.mp3', pitchOffset: 0 },
+      A: { file: 'A2.mp3', pitchOffset: 0 },
+      D: { file: 'D3.mp3', pitchOffset: 0 },
+      G: { file: 'G3.mp3', pitchOffset: 0 },
+      B: { file: 'B3.mp3', pitchOffset: 0 },
+      e: { file: 'E4.mp3', pitchOffset: 0 },
+    },
+    electric: {
+      E: { file: 'E2.mp3',  pitchOffset:  0 },  // E2 — exact
+      A: { file: 'A2.mp3',  pitchOffset:  0 },  // A2 — exact
+      D: { file: 'Ds3.mp3', pitchOffset: -1 },  // D3 from D♯3 (sample 1 ST high)
+      G: { file: 'Fs3.mp3', pitchOffset:  1 },  // G3 from F♯3 (sample 1 ST low)
+      B: { file: 'C4.mp3',  pitchOffset: -1 },  // B3 from C4  (sample 1 ST high)
+      e: { file: 'Ds4.mp3', pitchOffset:  1 },  // E4 from D♯4 (sample 1 ST low)
+    },
+  };
   // Instrument name → folder under /sounds/. "synth" is special: no folder,
-  // always falls through to the sawtooth oscillator. "electric" is currently
-  // bundled empty, so it's omitted here — selecting it in the UI is disabled,
-  // and any stale localStorage value falls back to DEFAULT_INSTRUMENT.
+  // always falls through to the sawtooth oscillator.
   const INSTRUMENT_FOLDERS = {
     acoustic: 'sounds/acoustic',
+    'acoustic-tonejs': 'sounds/acoustic-tonejs',
+    electric: 'sounds/electric',
   };
   const DEFAULT_INSTRUMENT = 'acoustic';
 
@@ -112,10 +146,12 @@ window.Player = (function () {
 
     const audioCtx = getCtx();
     const folder = INSTRUMENT_FOLDERS[instrument];
+    const filesMap = SAMPLE_FILES[instrument] || {};
     pack.loadingPromise = (async () => {
       const tasks = SAMPLE_ORDER.map(async (letter) => {
+        const entry = filesMap[letter] || { file: SAMPLE_FILENAMES_DEFAULT[letter], pitchOffset: 0 };
         try {
-          const r = await fetch(folder + '/' + SAMPLE_FILENAMES[letter]);
+          const r = await fetch(folder + '/' + entry.file);
           if (!r.ok) throw new Error('HTTP ' + r.status);
           const arr = await r.arrayBuffer();
           const buf = await new Promise((resolve, reject) =>
@@ -144,10 +180,16 @@ window.Player = (function () {
     const pack = currentInstrument !== 'synth' ? bufferPacks[currentInstrument] : null;
     const buf = pack && pack.ready ? pack.buffers[stringName] : null;
     if (buf) {
+      // Some packs use a sample whose actual pitch differs from the target
+      // open string (e.g. electric uses D♯3 in place of D3). pitchOffset is
+      // added to the playbackRate exponent to compensate: positive = sample
+      // is LOWER than target (speed up), negative = HIGHER (slow down).
+      const filesMap = SAMPLE_FILES[currentInstrument] || {};
+      const pitchOffset = (filesMap[stringName] && filesMap[stringName].pitchOffset) || 0;
       const src = audioCtx.createBufferSource();
       const g   = audioCtx.createGain();
       src.buffer = buf;
-      src.playbackRate.value = Math.pow(2, effectiveFret / 12);
+      src.playbackRate.value = Math.pow(2, (effectiveFret + pitchOffset) / 12);
       g.gain.setValueAtTime(gain, startTime);
       // Slight release so cutoff isn't abrupt when notes overlap
       g.gain.setValueAtTime(gain, startTime + 1.5);
