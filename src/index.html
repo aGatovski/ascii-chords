@@ -4,7 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>ASCII Chords</title>
-  <link rel="stylesheet" href="style.css" />
+  <link rel="stylesheet" href="style.css?v=20260608-feature-pass" />
 </head>
 <body>
   <header class="topbar no-print">
@@ -136,6 +136,13 @@
           <label>BPM <input type="range" id="bpm-slider" min="40" max="240" value="120" /></label>
           <input type="number" id="bpm-display" min="40" max="240" value="120" />
           <label><input type="checkbox" id="metronome-toggle" /> Metronome</label>
+          <label>Playback
+            <select id="playback-mode">
+              <option value="all">Tabs + chords</option>
+              <option value="tabs">Tabs only</option>
+              <option value="chords">Chords only</option>
+            </select>
+          </label>
           <label>Instrument
             <select id="instrument-select">
               <option value="synth">Synth</option>
@@ -144,6 +151,7 @@
               <option value="electric">Electric</option>
             </select>
           </label>
+          <span id="player-status" class="player-status">Acoustic selected</span>
         </div>
         <div class="toolbar-row">
           <button id="autoscroll-btn">↕ Autoscroll</button>
@@ -167,6 +175,7 @@
           <span class="muted" id="save-status"></span>
         </div>
       </footer>
+      <div id="chord-validation" class="chord-validation hidden"></div>
     </section>
   </template>
 
@@ -174,6 +183,18 @@
     <section class="chords-dict-view">
       <header><h2>Chord dictionary</h2>
         <input type="search" id="chord-search" placeholder="Search chord names…" />
+        <select id="chord-filter">
+          <option value="">All types</option>
+          <option value="major">Major</option>
+          <option value="minor">Minor</option>
+          <option value="7">7th</option>
+          <option value="maj7">maj7</option>
+          <option value="m7">m7</option>
+          <option value="sus">Sus</option>
+          <option value="add">Add</option>
+          <option value="5">Power</option>
+          <option value="slash">Slash</option>
+        </select>
       </header>
 
       <div id="chord-grid" class="chord-grid"></div>
@@ -282,9 +303,9 @@ E|--x--x--x--x--|</pre>
     </section>
   </template>
 
-  <script src="chords.js?v=20260608-audio"></script>
-  <script src="player.js?v=20260608-audio"></script>
-  <script src="autoscroll.js?v=20260608-audio"></script>
-  <script src="app.js?v=20260608-audio"></script>
+  <script src="chords.js?v=20260608-feature-pass"></script>
+  <script src="player.js?v=20260608-feature-pass"></script>
+  <script src="autoscroll.js?v=20260608-feature-pass"></script>
+  <script src="app.js?v=20260608-feature-pass"></script>
 </body>
 </html>

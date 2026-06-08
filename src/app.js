@@ -127,7 +127,37 @@
     // Wrap each chord token in a clickable span while preserving the original spacing.
     const escaped = escapeHtml(chordsLine);
     return escaped.replace(Chords.CHORD_GLOBAL_RE,
-      (full, tok) => `<span class="chord-token" data-chord="${tok}">${tok}</span>`);
+      (full, tok) => {
+        const missing = !Chords.getDefault(tok);
+        return `<span class="chord-token${missing ? ' chord-missing' : ''}" data-chord="${tok}">${tok}</span>`;
+      });
+  }
+
+  function collectUnknownChords(parsed) {
+    const unknown = new Set();
+    for (const block of parsed) {
+      const line = block.chords;
+      if (!line) continue;
+      const tokens = line.match(Chords.CHORD_GLOBAL_RE) || [];
+      tokens.forEach(tok => {
+        if (!Chords.getDefault(tok)) unknown.add(tok);
+      });
+    }
+    return Array.from(unknown).sort();
+  }
+
+  function renderChordValidation(unknown) {
+    const box = document.getElementById('chord-validation');
+    if (!box) return;
+    if (!unknown.length) {
+      box.classList.add('hidden');
+      box.innerHTML = '';
+      return;
+    }
+    box.classList.remove('hidden');
+    box.innerHTML = '<strong>Unknown chord shapes:</strong> ' +
+      unknown.map(c => `<span>${escapeHtml(c)}</span>`).join(' ') +
+      '<em>These chords will be skipped by chord playback unless written as tab.</em>';
   }
 
   function renderParsed(parsed, container) {
@@ -460,8 +490,8 @@
       // Lock every meta input so the read-only viewer can't edit anything.
       document.querySelectorAll('.editor-meta-grid input, .editor-meta-grid select, .editor-meta-grid textarea, .editor-meta-bar input')
         .forEach(el => el.setAttribute('disabled', ''));
-      // Remove save/delete affordances when not the owner.
-      ['save-btn', 'delete-btn'].forEach(id => {
+      // Remove edit-only affordances when not the owner.
+      ['save-btn', 'delete-btn', 'tab-editor-btn'].forEach(id => {
         const b = document.getElementById(id);
         if (b) b.style.display = 'none';
       });
@@ -487,6 +517,7 @@
       const text = applyTransposition(ta.value, _editorState.semitones, _editorState.useFlats);
       const parsed = parseSongBody(text);
       renderParsed(parsed, preview);
+      renderChordValidation(collectUnknownChords(parsed));
     }
     function scheduleRender() {
       clearTimeout(renderTimer);
@@ -631,6 +662,18 @@
     document.getElementById('metronome-toggle').addEventListener('change', e => {
       window.Player.setMetronome(e.target.checked);
     });
+    const modeSel = document.getElementById('playback-mode');
+    if (modeSel && window.Player) {
+      window.Player.setPlaybackMode(modeSel.value);
+      modeSel.addEventListener('change', e => window.Player.setPlaybackMode(e.target.value));
+    }
+    const statusEl = document.getElementById('player-status');
+    if (statusEl) {
+      window.addEventListener('player:status', e => {
+        statusEl.textContent = e.detail.message || '';
+        statusEl.dataset.state = e.detail.state || '';
+      });
+    }
     // Tuning change — apply immediately to any in-flight playback
     document.getElementById('meta-tuning').addEventListener('change', e => {
       if (window.Player) window.Player.setTuning(e.target.value);
@@ -916,11 +959,28 @@
     const grid   = document.getElementById('chord-grid');
     const search = document.getElementById('chord-search');
 
+    const typeFilter = document.getElementById('chord-filter');
+
+    function chordType(name) {
+      if (name.includes('/')) return 'slash';
+      if (/5$/.test(name)) return '5';
+      if (/m7$/.test(name)) return 'm7';
+      if (/maj7$/.test(name)) return 'maj7';
+      if (/7$/.test(name)) return '7';
+      if (/sus/.test(name)) return 'sus';
+      if (/add/.test(name)) return 'add';
+      if (/m$/.test(name)) return 'minor';
+      return 'major';
+    }
+
     function render(filter) {
       const lib = Chords.getLibrary();
-      const items = filter
-        ? lib.filter(c => c.chord_name.toLowerCase().includes(filter))
-        : lib;
+      const type = typeFilter ? typeFilter.value : '';
+      const items = lib.filter(c => {
+        const matchesText = !filter || c.chord_name.toLowerCase().includes(filter);
+        const matchesType = !type || chordType(c.chord_name) === type;
+        return matchesText && matchesType;
+      });
       grid.innerHTML = items.map(c => `
         <div class="chord-card" data-id="${c.id}">
           <div class="chord-card-name">
@@ -936,6 +996,7 @@
       clearTimeout(t);
       t = setTimeout(() => render(search.value.trim().toLowerCase()), 120);
     });
+    if (typeFilter) typeFilter.addEventListener('change', () => render(search.value.trim().toLowerCase()));
   }
 
   // -------- Public catalog view --------

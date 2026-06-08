@@ -254,6 +254,18 @@ input:focus, select:focus, textarea:focus {
 /* Read-only view: hide the raw editor, show only the rendered preview */
 .editor-view.read-only .editor-split { grid-template-columns: 1fr; }
 .editor-view.read-only #raw-editor { display: none; }
+.editor-view.read-only .preview {
+  border-color: var(--chord);
+  min-height: 50vh;
+  max-height: none;
+}
+.editor-view.read-only .editor-meta-grid,
+.editor-view.read-only .editor-meta-bar {
+  opacity: 0.78;
+}
+.editor-view.read-only .editor-toolbar {
+  border-color: var(--chord);
+}
 
 #raw-editor, .preview {
   background: var(--panel);
@@ -296,6 +308,10 @@ input:focus, select:focus, textarea:focus {
 .preview .chord-token:hover {
   background: rgba(110, 168, 254, 0.15);
 }
+.preview .chord-token.chord-missing {
+  color: #f87171;
+  border-bottom-color: #f87171;
+}
 .preview .lyric-row { color: var(--text); }
 .preview .lyric { font-family: var(--mono); white-space: pre; }
 .preview .tab-block {
@@ -337,6 +353,38 @@ input:focus, select:focus, textarea:focus {
   gap: 0.4rem;
 }
 #bpm-display { width: 4.5rem; }
+.player-status {
+  color: var(--muted);
+  font-size: 0.85em;
+  min-width: 9rem;
+}
+.player-status[data-state="ready"],
+.player-status[data-state="playing"] { color: var(--success); }
+.player-status[data-state="loading"] { color: var(--accent-2); }
+.player-status[data-state="partial"],
+.player-status[data-state="fallback"] { color: var(--danger); }
+.chord-validation {
+  background: rgba(239, 68, 68, 0.10);
+  border: 1px solid rgba(239, 68, 68, 0.45);
+  border-radius: 6px;
+  padding: 0.55rem 0.75rem;
+  color: #fecaca;
+  font-size: 0.9em;
+}
+.chord-validation span {
+  display: inline-block;
+  margin: 0.15rem 0.2rem;
+  padding: 0.05rem 0.35rem;
+  border: 1px solid rgba(248, 113, 113, 0.45);
+  border-radius: 4px;
+  font-family: var(--mono);
+}
+.chord-validation em {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--muted);
+  font-style: normal;
+}
 
 /* ============================================================
    Chord popover
@@ -375,6 +423,14 @@ input:focus, select:focus, textarea:focus {
   display: grid;
   gap: 1rem;
   grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+}
+.chords-dict-view header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
 }
 .chord-card {
   background: var(--panel);

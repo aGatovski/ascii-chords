@@ -106,8 +106,17 @@ window.Player = (function () {
   let isPlaying = false;
   let isPaused = false;
   let activeBeatTimer = null;
+  let playbackEndTimer = null;
   let currentTuning = 'Standard';
   let currentInstrument = DEFAULT_INSTRUMENT;
+  let playbackMode = 'all';
+
+  const INSTRUMENT_LABELS = {
+    synth: 'Synth',
+    acoustic: 'Acoustic',
+    'acoustic-tonejs': 'Acoustic (Tone.js)',
+    electric: 'Electric',
+  };
 
   // ---- Sample cache ------------------------------------------------------
   // bufferPacks[instrument] = { buffers: { stringLetter: AudioBuffer|null },
@@ -132,21 +141,41 @@ window.Player = (function () {
   // Loads the 6 sample files for `instrument` (one network round-trip per
   // string, in parallel). Re-entrant: a second call while the first is in
   // flight returns the same promise.
+  function emitStatus(detail) {
+    window.dispatchEvent(new CustomEvent('player:status', {
+      detail: Object.assign({
+        instrument: currentInstrument,
+        label: INSTRUMENT_LABELS[currentInstrument] || currentInstrument,
+        mode: playbackMode,
+      }, detail || {}),
+    }));
+  }
+
   async function loadSamples(instrument) {
     instrument = instrument || currentInstrument;
-    if (instrument === 'synth') return;
-    if (!INSTRUMENT_FOLDERS[instrument]) return;
+    if (instrument === 'synth') {
+      emitStatus({ state: 'ready', message: 'Synth ready' });
+      return null;
+    }
+    if (!INSTRUMENT_FOLDERS[instrument]) return null;
 
     if (!bufferPacks[instrument]) {
-      bufferPacks[instrument] = { buffers: {}, loadingPromise: null, ready: false };
+      bufferPacks[instrument] = { buffers: {}, loadingPromise: null, ready: false, failed: 0 };
     }
     const pack = bufferPacks[instrument];
-    if (pack.ready) return;
+    if (pack.ready) {
+      emitStatus({
+        state: pack.failed ? 'partial' : 'ready',
+        message: pack.failed ? `${INSTRUMENT_LABELS[instrument] || instrument}: partial samples` : `${INSTRUMENT_LABELS[instrument] || instrument} loaded`,
+      });
+      return pack;
+    }
     if (pack.loadingPromise) return pack.loadingPromise;
 
     const audioCtx = getCtx();
     const folder = INSTRUMENT_FOLDERS[instrument];
     const filesMap = SAMPLE_FILES[instrument] || {};
+    emitStatus({ state: 'loading', message: `Loading ${INSTRUMENT_LABELS[instrument] || instrument} samples` });
     pack.loadingPromise = (async () => {
       const tasks = SAMPLE_ORDER.map(async (letter) => {
         const entry = filesMap[letter] || { file: SAMPLE_FILENAMES_DEFAULT[letter], pitchOffset: 0 };
@@ -165,6 +194,14 @@ window.Player = (function () {
       });
       await Promise.all(tasks);
       pack.ready = SAMPLE_ORDER.some(l => pack.buffers[l]);
+      pack.failed = SAMPLE_ORDER.filter(l => !pack.buffers[l]).length;
+      emitStatus({
+        state: pack.ready ? (pack.failed ? 'partial' : 'ready') : 'fallback',
+        message: pack.ready
+          ? (pack.failed ? `${INSTRUMENT_LABELS[instrument] || instrument}: ${6 - pack.failed}/6 samples loaded` : `${INSTRUMENT_LABELS[instrument] || instrument} loaded`)
+          : `${INSTRUMENT_LABELS[instrument] || instrument} unavailable; using Synth`,
+      });
+      return pack;
     })();
     return pack.loadingPromise;
   }
@@ -253,7 +290,11 @@ window.Player = (function () {
         while (i + 1 < lines.length && /^\s*[eEBGDAd]\|/.test(lines[i + 1])) {
           block.push(lines[++i]);
         }
-        cursor = scheduleTabBlock(audioCtx, block, beatInterval, cursor);
+        if (playbackMode === 'all' || playbackMode === 'tabs') {
+          cursor = scheduleTabBlock(audioCtx, block, beatInterval, cursor);
+        } else {
+          cursor += Math.max(1, Math.max(...block.map(l => l.length))) * beatInterval / 4;
+        }
       } else if (line.trim() === '') {
         cursor += beatInterval * 0.5;
       } else if (/^\[.+\]$/.test(line.trim())) {
@@ -262,7 +303,12 @@ window.Player = (function () {
         // Chord lines: schedule a downstrum per token, one beat each.
         // Unknown chord names (no shape in the library) advance the cursor
         // silently so the song's timing doesn't drift.
-        cursor = scheduleChordLine(audioCtx, line, beatInterval, cursor);
+        if (playbackMode === 'all' || playbackMode === 'chords') {
+          cursor = scheduleChordLine(audioCtx, line, beatInterval, cursor);
+        } else {
+          const tokens = line.match(window.Chords.CHORD_GLOBAL_RE) || [];
+          cursor += Math.max(1, tokens.length) * beatInterval;
+        }
       } else {
         // Lyric lines have no audio; skip a beat so structure is preserved.
         cursor += beatInterval;
@@ -362,6 +408,24 @@ window.Player = (function () {
     if (preview) preview.style.outline = '';
   }
 
+  function clearPlaybackEndTimer() {
+    if (playbackEndTimer) clearTimeout(playbackEndTimer);
+    playbackEndTimer = null;
+  }
+
+  function schedulePlaybackEnd(durationSeconds) {
+    clearPlaybackEndTimer();
+    const durationMs = Math.max(0, durationSeconds * 1000);
+    playbackEndTimer = setTimeout(() => {
+      playbackEndTimer = null;
+      if (!isPlaying || isPaused) return;
+      isPlaying = false;
+      scheduled = [];
+      stopBeatHighlight();
+      emitStatus({ state: 'ended', message: 'Playback finished' });
+    }, durationMs + 250);
+  }
+
   // ---- Public API --------------------------------------------------------
   async function play(text, songBpm, songTuning) {
     stop();
@@ -370,32 +434,44 @@ window.Player = (function () {
     // click) also unblocks the AudioContext, so this is the right moment.
     await loadSamples(currentInstrument);
     isPlaying = true; isPaused = false;
-    scheduleSong(text, songBpm);
+    emitStatus({ state: 'playing', message: `Playing ${INSTRUMENT_LABELS[currentInstrument] || currentInstrument}` });
+    const duration = scheduleSong(text, songBpm);
     startBeatHighlight();
+    schedulePlaybackEnd(duration);
   }
 
   function pause() {
     if (!isPlaying || isPaused) return;
     isPaused = true;
+    clearPlaybackEndTimer();
+    stopBeatHighlight();
+    emitStatus({ state: 'paused', message: 'Playback paused' });
     if (ctx) ctx.suspend();
   }
 
   function stop() {
     isPlaying = false;
     isPaused = false;
+    clearPlaybackEndTimer();
     for (const s of scheduled) {
       try { s.node.stop(); } catch (e) {}
     }
     scheduled = [];
     if (ctx && ctx.state !== 'closed') ctx.resume();
     stopBeatHighlight();
+    emitStatus({ state: 'stopped', message: 'Playback stopped' });
   }
 
   function setBpm(v)        { bpm = v; }
   function setTuning(name)  { currentTuning = name || 'Standard'; }
+  function setPlaybackMode(mode) {
+    playbackMode = ['all', 'tabs', 'chords'].includes(mode) ? mode : 'all';
+    emitStatus({ state: 'ready', message: `Mode: ${playbackMode}` });
+  }
   function setInstrument(name) {
     currentInstrument = (name && (INSTRUMENT_FOLDERS[name] || name === 'synth'))
       ? name : DEFAULT_INSTRUMENT;
+    emitStatus({ state: currentInstrument === 'synth' ? 'ready' : 'loading', message: `${INSTRUMENT_LABELS[currentInstrument] || currentInstrument} selected` });
     // Kick off a load now so the first Play press doesn't wait on the network.
     if (currentInstrument !== 'synth') loadSamples(currentInstrument);
   }
@@ -412,5 +488,5 @@ window.Player = (function () {
     }
   }
 
-  return { play, pause, stop, setBpm, setTuning, setMetronome, setInstrument, loadSamples };
+  return { play, pause, stop, setBpm, setTuning, setMetronome, setInstrument, setPlaybackMode, loadSamples };
 })();
