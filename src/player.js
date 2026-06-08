@@ -105,8 +105,10 @@ window.Player = (function () {
   let scheduled = [];
   let isPlaying = false;
   let isPaused = false;
+  let playGeneration = 0;
   let activeBeatTimer = null;
   let playbackEndTimer = null;
+  let latestScheduledStopTime = 0;
   let currentTuning = 'Standard';
   let currentInstrument = DEFAULT_INSTRUMENT;
   let playbackMode = 'all';
@@ -233,7 +235,9 @@ window.Player = (function () {
       g.gain.exponentialRampToValueAtTime(0.0001, startTime + 1.9);
       src.connect(g).connect(audioCtx.destination);
       src.start(startTime);
-      src.stop(startTime + 2.0);
+      const stopTime = startTime + 2.0;
+      src.stop(stopTime);
+      latestScheduledStopTime = Math.max(latestScheduledStopTime, stopTime);
       scheduled.push({ node: src });
       return;
     }
@@ -253,7 +257,9 @@ window.Player = (function () {
     g.gain.exponentialRampToValueAtTime(0.0001, startTime + duration);
     osc.connect(g).connect(audioCtx.destination);
     osc.start(startTime);
-    osc.stop(startTime + duration + 0.05);
+    const stopTime = startTime + duration + 0.05;
+    osc.stop(stopTime);
+    latestScheduledStopTime = Math.max(latestScheduledStopTime, stopTime);
     scheduled.push({ node: osc });
   }
 
@@ -267,7 +273,9 @@ window.Player = (function () {
     g.gain.exponentialRampToValueAtTime(0.0001, time + 0.05);
     osc.connect(g).connect(audioCtx.destination);
     osc.start(time);
-    osc.stop(time + 0.06);
+    const stopTime = time + 0.06;
+    osc.stop(stopTime);
+    latestScheduledStopTime = Math.max(latestScheduledStopTime, stopTime);
     // Track the node so stop() and toggling the checkbox off can cancel
     // ticks that were already scheduled into the future.
     scheduled.push({ node: osc, kind: 'metronome' });
@@ -315,7 +323,7 @@ window.Player = (function () {
       }
       i++;
     }
-    return cursor - startAt;
+    return Math.max(cursor, latestScheduledStopTime) - startAt;
   }
 
   // Schedules a strum for every chord token on a chord line. Each token
@@ -421,6 +429,7 @@ window.Player = (function () {
       if (!isPlaying || isPaused) return;
       isPlaying = false;
       scheduled = [];
+      latestScheduledStopTime = 0;
       stopBeatHighlight();
       emitStatus({ state: 'ended', message: 'Playback finished' });
     }, durationMs + 250);
@@ -428,11 +437,14 @@ window.Player = (function () {
 
   // ---- Public API --------------------------------------------------------
   async function play(text, songBpm, songTuning) {
-    stop();
+    stop({ cancelPending: false });
+    const generation = ++playGeneration;
     if (songTuning) currentTuning = songTuning;
     // Ensure samples are loaded before scheduling. The user gesture (Play
     // click) also unblocks the AudioContext, so this is the right moment.
     await loadSamples(currentInstrument);
+    if (generation !== playGeneration) return;
+    latestScheduledStopTime = 0;
     isPlaying = true; isPaused = false;
     emitStatus({ state: 'playing', message: `Playing ${INSTRUMENT_LABELS[currentInstrument] || currentInstrument}` });
     const duration = scheduleSong(text, songBpm);
@@ -449,7 +461,8 @@ window.Player = (function () {
     if (ctx) ctx.suspend();
   }
 
-  function stop() {
+  function stop(options = {}) {
+    if (options.cancelPending !== false) playGeneration++;
     isPlaying = false;
     isPaused = false;
     clearPlaybackEndTimer();
@@ -457,6 +470,7 @@ window.Player = (function () {
       try { s.node.stop(); } catch (e) {}
     }
     scheduled = [];
+    latestScheduledStopTime = 0;
     if (ctx && ctx.state !== 'closed') ctx.resume();
     stopBeatHighlight();
     emitStatus({ state: 'stopped', message: 'Playback stopped' });

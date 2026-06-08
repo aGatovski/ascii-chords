@@ -292,12 +292,25 @@
     return PUBLIC_ROUTES.some(re => re.test(hash));
   }
   let _isGuest = false;
+  let _activeRouteHash = null;
+  function isSongRoute(hash) {
+    return /^#song\/(?:new|\d+)/.test(hash || '');
+  }
+  function stopActivePlayback() {
+    if (window.Player && typeof window.Player.stop === 'function') {
+      window.Player.stop();
+    }
+  }
   function navigate() {
     // The tab editor modal lives outside #view-root, so a route change
     // wouldn't otherwise clear it. Hide it on every navigation.
     const tabModal = document.getElementById('tab-editor-modal');
     if (tabModal) tabModal.classList.add('hidden');
     const hash = window.location.hash || '#library';
+    if (_activeRouteHash && _activeRouteHash !== hash && isSongRoute(_activeRouteHash)) {
+      stopActivePlayback();
+    }
+    _activeRouteHash = hash;
     if (_isGuest && !isPublicRoute(hash)) {
       window.location.href = 'login.html';
       return;
@@ -421,7 +434,7 @@
             } catch (e) { toast(e.message, 'error'); }
           } else if (act === 'del') {
             if (!confirm('Delete this song?')) return;
-            try { await API.deleteSong(id); toast('Deleted', 'success'); navigate(); }
+            try { stopActivePlayback(); await API.deleteSong(id); toast('Deleted', 'success'); navigate(); }
             catch (e) { toast(e.message, 'error'); }
           }
         });
@@ -938,11 +951,13 @@
         clearDraft();
         toast('Draft discarded', '');
       }
+      stopActivePlayback();
       window.location.hash = '#library';
       return;
     }
     if (!confirm('Delete this song?')) return;
     try {
+      stopActivePlayback();
       await API.deleteSong(_editorState.song.id);
       toast('Deleted', 'success');
       window.location.hash = '#library';
