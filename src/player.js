@@ -301,7 +301,7 @@ window.Player = (function () {
         if (playbackMode === 'all' || playbackMode === 'tabs') {
           cursor = scheduleTabBlock(audioCtx, block, beatInterval, cursor);
         } else {
-          cursor += Math.max(1, Math.max(...block.map(l => l.length))) * beatInterval / 4;
+          cursor += Math.max(1, Math.max(...block.map(l => countTabSteps(tabBody(l))))) * beatInterval / 4;
         }
       } else if (line.trim() === '') {
         cursor += beatInterval * 0.5;
@@ -368,12 +368,13 @@ window.Player = (function () {
       if (ch === 'd') return 'D';   // some tabs use lower-case d for the D string
       return ch;                     // E, B, G, D, A
     });
-    const bodies = blockLines.map(l => l.replace(/^\s*[eEBGDAd]\|/, ''));
+    const bodies = blockLines.map(tabBody);
     const maxLen = Math.max(...bodies.map(b => b.length));
 
     let time = startTime;
     let col = 0;
     while (col < maxLen) {
+      let stepWidth = 1;
       for (let s = 0; s < bodies.length; s++) {
         const body = bodies[s];
         if (col >= body.length) continue;
@@ -381,9 +382,10 @@ window.Player = (function () {
         if (m) {
           const fret = parseInt(m[1], 10);
           playNote(audioCtx, letters[s], fret, time, 0.2);
+          stepWidth = Math.max(stepWidth, m[1].length);
         }
       }
-      col += 1;
+      col += stepWidth;
       time += beatInterval / 4;
     }
     if (metronomeOn) {
@@ -392,7 +394,22 @@ window.Player = (function () {
         metronomeTick(audioCtx, startTime + b * beatInterval, b === 0);
       }
     }
-    return time + beatInterval * 0.25;
+    return time;
+  }
+
+  function tabBody(line) {
+    return line.replace(/^\s*[eEBGDAd]\|/, '').replace(/\|\s*$/, '');
+  }
+
+  function countTabSteps(body) {
+    let col = 0;
+    let steps = 0;
+    while (col < body.length) {
+      const m = body.substring(col).match(/^(\d{1,2})/);
+      col += m ? m[1].length : 1;
+      steps++;
+    }
+    return steps;
   }
 
   // ---- Visual beat pulse -------------------------------------------------

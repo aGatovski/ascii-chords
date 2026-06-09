@@ -614,6 +614,9 @@ body.guest-mode [data-guest-only] { display: inline-flex; }
   padding: 0.1em 0.2em;
   border-radius: 4px;
 }
+.tab-cell.beat-start {
+  border-left: 2px solid var(--accent-2);
+}
 .tab-cell:focus {
   background: var(--panel);
   outline: 2px solid var(--accent);

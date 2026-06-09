@@ -730,18 +730,45 @@
   }
 
   // -------- Tab editor modal --------
-  // 6 strings × 8 columns. Display order matches written tab:
+  // Display order matches written tab:
   // row 0 = high e (top), row 5 = low E (bottom).
   const TAB_STRINGS = ['e', 'B', 'G', 'D', 'A', 'E'];
-  const TAB_COLS    = 8;
-  let tabState = null;  // 6×TAB_COLS array of strings ('', '0'..'24', 'x')
+  const TAB_BEATS_PER_BAR = 4;
+  const TAB_STEPS_PER_BEAT = 4;
+  let tabCols = TAB_BEATS_PER_BAR * TAB_STEPS_PER_BEAT;
+  let tabState = null;  // 6 x tabCols array of strings ('', '0'..'24', 'x')
+
+  function currentTabEditorBpm() {
+    const bpmField = document.getElementById('meta-bpm');
+    const n = parseInt(bpmField && bpmField.value, 10);
+    return Math.max(40, Math.min(240, isNaN(n) ? 120 : n));
+  }
+
+  function tabColumnsForBpm(songBpm) {
+    const secondsPerBeat = 60 / songBpm;
+    const barSeconds = secondsPerBeat * TAB_BEATS_PER_BAR;
+    const stepSeconds = secondsPerBeat / TAB_STEPS_PER_BEAT;
+    return Math.max(TAB_BEATS_PER_BAR, Math.round(barSeconds / stepSeconds));
+  }
+
+  function ensureTabStateForCurrentBar() {
+    const nextCols = tabColumnsForBpm(currentTabEditorBpm());
+    if (!tabState) {
+      tabCols = nextCols;
+      tabState = TAB_STRINGS.map(() => Array(tabCols).fill(''));
+      return;
+    }
+    if (nextCols === tabCols) return;
+    tabState = TAB_STRINGS.map((_, r) =>
+      Array.from({ length: nextCols }, (_, c) => (tabState[r] && tabState[r][c]) || '')
+    );
+    tabCols = nextCols;
+  }
 
   function openTabEditor() {
     const modal = document.getElementById('tab-editor-modal');
     if (!modal) return;
-    if (!tabState) {
-      tabState = TAB_STRINGS.map(() => Array(TAB_COLS).fill(''));
-    }
+    ensureTabStateForCurrentBar();
     renderTabGrid();
     modal.classList.remove('hidden');
     // Focus the first input for keyboard-friendly entry
@@ -759,10 +786,11 @@
     for (let r = 0; r < 6; r++) {
       html.push('<div class="tab-row">');
       html.push(`<span class="tab-string">${TAB_STRINGS[r]}|</span>`);
-      for (let c = 0; c < TAB_COLS; c++) {
+      for (let c = 0; c < tabCols; c++) {
         const v = tabState[r][c];
+        const beatClass = c % TAB_STEPS_PER_BEAT === 0 ? ' beat-start' : '';
         html.push(
-          `<input type="text" class="tab-cell" data-r="${r}" data-c="${c}" ` +
+          `<input type="text" class="tab-cell${beatClass}" data-r="${r}" data-c="${c}" ` +
           `maxlength="2" value="${v}" />`
         );
       }
@@ -785,7 +813,7 @@
         const r = parseInt(inp.dataset.r, 10);
         const c = parseInt(inp.dataset.c, 10);
         let nr = r, nc = c;
-        if (e.key === 'ArrowRight') nc = Math.min(TAB_COLS - 1, c + 1);
+        if (e.key === 'ArrowRight') nc = Math.min(tabCols - 1, c + 1);
         else if (e.key === 'ArrowLeft')  nc = Math.max(0, c - 1);
         else if (e.key === 'ArrowDown')  nr = Math.min(5, r + 1);
         else if (e.key === 'ArrowUp')    nr = Math.max(0, r - 1);
@@ -812,9 +840,9 @@
   function tabStateToAscii() {
     // Each column is rendered with width = max width of any cell in that
     // column (so 12s and single digits stay aligned). Empty cells become
-    // "-" of the same width. Separator between cells is one "-".
+    // "-" of the same width.
     const colWidths = [];
-    for (let c = 0; c < TAB_COLS; c++) {
+    for (let c = 0; c < tabCols; c++) {
       let w = 1;
       for (let r = 0; r < 6; r++) {
         const v = tabState[r][c];
@@ -825,13 +853,13 @@
     const lines = [];
     for (let r = 0; r < 6; r++) {
       let line = TAB_STRINGS[r] + '|';
-      for (let c = 0; c < TAB_COLS; c++) {
+      for (let c = 0; c < tabCols; c++) {
         const w = colWidths[c];
         const v = tabState[r][c];
         const cell = v === '' ? '-'.repeat(w) : v.padStart(w, '-');
-        line += '-' + cell;
+        line += cell;
       }
-      line += '-|';
+      line += '|';
       lines.push(line);
     }
     return lines.join('\n');
@@ -842,7 +870,8 @@
   }
 
   function clearTabState() {
-    tabState = TAB_STRINGS.map(() => Array(TAB_COLS).fill(''));
+    ensureTabStateForCurrentBar();
+    tabState = TAB_STRINGS.map(() => Array(tabCols).fill(''));
     renderTabGrid();
   }
 
