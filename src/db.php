@@ -10,7 +10,7 @@ function get_pdo(): PDO {
         $pass = getenv('DB_PASS') ?: 'chords_pass';
         $dsn  = "mysql:host={$host};dbname={$name};charset=utf8mb4";
 
-        // Retry briefly: db container may not be ready when web boots
+        // brief retry
         $attempts = 0;
         while (true) {
             try {

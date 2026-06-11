@@ -10,7 +10,7 @@ session_start();
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 
-// ---------- Helpers --------------------------------------------------------
+// helpers
 
 function json_response($data, int $code = 200): void {
     http_response_code($code);
@@ -40,7 +40,6 @@ function csrf_token(): string {
 }
 
 function require_csrf(): void {
-    // GET requests are read-only; CSRF check applies only to state-changing methods.
     $method = $_SERVER['REQUEST_METHOD'];
     if (in_array($method, ['POST', 'PUT', 'DELETE', 'PATCH'], true)) {
         $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? ($_POST['_csrf_token'] ?? '');
@@ -56,17 +55,17 @@ function clamp_int($v, int $min, int $max, int $default): int {
     return max($min, min($max, $n));
 }
 
-// ---------- Routing --------------------------------------------------------
+// routing
 
 $method = $_SERVER['REQUEST_METHOD'];
-$uri    = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?: '/';
-// Strip leading "/api/"
-$path   = preg_replace('#^/api/?#', '', $uri);
-$parts  = $path === '' ? [] : explode('/', trim($path, '/'));
+$uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) ?: '/';
+
+$path = preg_replace('#^/api/?#', '', $uri);
+$parts = $path === '' ? [] : explode('/', trim($path, '/'));
 $resource = $parts[0] ?? '';
-$id       = $parts[1] ?? null;
-$action   = $parts[2] ?? null;
-$sub      = $parts[3] ?? null;
+$id = $parts[1] ?? null;
+$action = $parts[2] ?? null;
+$sub = $parts[3] ?? null;
 
 try {
     switch ($resource) {
@@ -94,8 +93,6 @@ try {
             json_response(['error' => 'Not found', 'path' => $uri], 404);
     }
 } catch (Throwable $e) {
-    // Always log the full detail server-side; expose it to the client only
-    // when APP_DEBUG=1 is set. Production stays opaque.
     error_log('[api] ' . $e->getMessage() . ' @ ' . $e->getFile() . ':' . $e->getLine());
     $body = ['error' => 'Server error'];
     if (getenv('APP_DEBUG') === '1') {
@@ -104,23 +101,26 @@ try {
     json_response($body, 500);
 }
 
-// ---------- Auth -----------------------------------------------------------
+// auth
 
 function handle_auth(?string $action, string $method): void {
     if ($method !== 'POST') json_response(['error' => 'Method not allowed'], 405);
 
     $body = json_body();
-    $pdo  = get_pdo();
+    $pdo = get_pdo();
 
     if ($action === 'register') {
         $username = trim((string)($body['username'] ?? ''));
         $password = (string)($body['password'] ?? '');
+
         if ($username === '' || strlen($username) > 50) {
             json_response(['error' => 'Username must be 1-50 chars'], 400);
         }
+
         if (strlen($password) < 6) {
             json_response(['error' => 'Password must be at least 6 chars'], 400);
         }
+
         $hash = password_hash($password, PASSWORD_BCRYPT);
         try {
             $stmt = $pdo->prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)');
@@ -131,9 +131,10 @@ function handle_auth(?string $action, string $method): void {
             }
             throw $e;
         }
+
         $userId = (int) $pdo->lastInsertId();
         session_regenerate_id(true);
-        $_SESSION['user_id']  = $userId;
+        $_SESSION['user_id'] = $userId;
         $_SESSION['username'] = $username;
         json_response(['user' => ['id' => $userId, 'username' => $username]], 201);
     }
@@ -144,9 +145,11 @@ function handle_auth(?string $action, string $method): void {
         $stmt = $pdo->prepare('SELECT id, username, password_hash FROM users WHERE username = ?');
         $stmt->execute([$username]);
         $u = $stmt->fetch();
+
         if (!$u || !password_verify($password, $u['password_hash'])) {
             json_response(['error' => 'Invalid credentials'], 401);
         }
+
         session_regenerate_id(true);
         $_SESSION['user_id']  = (int)$u['id'];
         $_SESSION['username'] = $u['username'];
@@ -155,11 +158,13 @@ function handle_auth(?string $action, string $method): void {
 
     if ($action === 'logout') {
         $_SESSION = [];
+
         if (ini_get('session.use_cookies')) {
             $p = session_get_cookie_params();
             setcookie(session_name(), '', time() - 42000,
                 $p['path'], $p['domain'], $p['secure'], $p['httponly']);
         }
+
         session_destroy();
         json_response(['ok' => true]);
     }
@@ -167,14 +172,15 @@ function handle_auth(?string $action, string $method): void {
     json_response(['error' => 'Unknown auth action'], 404);
 }
 
-// ---------- Songs ----------------------------------------------------------
+// songs
 
 function song_to_array(array $row): array {
-    $row['id']        = (int)$row['id'];
-    $row['user_id']   = (int)$row['user_id'];
-    $row['year']      = $row['year']      !== null ? (int)$row['year']      : null;
-    $row['capo']      = (int)$row['capo'];
+    $row['id'] = (int)$row['id'];
+    $row['user_id'] = (int)$row['user_id'];
+    $row['year'] = $row['year'] !== null ? (int)$row['year'] : null;
+    $row['capo'] = (int)$row['capo'];
     $row['tempo_bpm'] = (int)$row['tempo_bpm'];
+
     if (array_key_exists('is_public', $row)) {
         $row['is_public'] = (int)$row['is_public'] === 1;
     }
@@ -187,6 +193,7 @@ function fetch_song_tags(PDO $pdo, int $songId): array {
          JOIN song_tags st ON st.tag_id = t.id
          WHERE st.song_id = ?'
     );
+
     $stmt->execute([$songId]);
     return array_map(fn($r) => $r['name'], $stmt->fetchAll());
 }
@@ -194,9 +201,11 @@ function fetch_song_tags(PDO $pdo, int $songId): array {
 function set_song_tags(PDO $pdo, int $songId, array $tagNames): void {
     $pdo->prepare('DELETE FROM song_tags WHERE song_id = ?')->execute([$songId]);
     if (!$tagNames) return;
+
     $insertTag = $pdo->prepare('INSERT IGNORE INTO tags (name) VALUES (?)');
-    $findTag   = $pdo->prepare('SELECT id FROM tags WHERE name = ?');
-    $linkTag   = $pdo->prepare('INSERT IGNORE INTO song_tags (song_id, tag_id) VALUES (?, ?)');
+    $findTag = $pdo->prepare('SELECT id FROM tags WHERE name = ?');
+    $linkTag = $pdo->prepare('INSERT IGNORE INTO song_tags (song_id, tag_id) VALUES (?, ?)');
+
     foreach ($tagNames as $name) {
         $name = trim((string)$name);
         if ($name === '') continue;
@@ -210,21 +219,21 @@ function set_song_tags(PDO $pdo, int $songId, array $tagNames): void {
 function handle_songs(?string $id, ?string $action, ?string $sub, string $method): void {
     $pdo = get_pdo();
 
-    // Import endpoint: POST /api/songs/import (multipart upload)
+    // import endpoint
     if ($id === 'import' && $method === 'POST') {
         require_auth();
         require_csrf();
         return_song_import();
     }
 
-    // Collection endpoints
+    // collection endpoints
     if ($id === null) {
-        if ($method === 'GET')  return_songs_list($pdo);
+        if ($method === 'GET') return_songs_list($pdo);
         if ($method === 'POST') return_songs_create($pdo);
         json_response(['error' => 'Method not allowed'], 405);
     }
 
-    // Item endpoints
+    // item endpoints
     $songId = (int)$id;
     if ($songId <= 0) json_response(['error' => 'Invalid song id'], 400);
 
@@ -233,8 +242,8 @@ function handle_songs(?string $id, ?string $action, ?string $sub, string $method
     }
 
     switch ($method) {
-        case 'GET':    return_song_get($pdo, $songId);
-        case 'PUT':    return_song_update($pdo, $songId);
+        case 'GET': return_song_get($pdo, $songId);
+        case 'PUT': return_song_update($pdo, $songId);
         case 'DELETE': return_song_delete($pdo, $songId);
         default: json_response(['error' => 'Method not allowed'], 405);
     }
@@ -242,41 +251,43 @@ function handle_songs(?string $id, ?string $action, ?string $sub, string $method
 
 function return_songs_list(PDO $pdo): void {
     $userId = require_auth();
-    $q          = trim((string)($_GET['q'] ?? ''));
-    $key        = trim((string)($_GET['key'] ?? ''));
+    $q = trim((string)($_GET['q'] ?? ''));
+    $key = trim((string)($_GET['key'] ?? ''));
     $difficulty = trim((string)($_GET['difficulty'] ?? ''));
-    $genre      = trim((string)($_GET['genre'] ?? ''));
-    $tuning     = trim((string)($_GET['tuning'] ?? ''));
-    $sort       = (string)($_GET['sort'] ?? 'updated_desc');
+    $genre = trim((string)($_GET['genre'] ?? ''));
+    $tuning = trim((string)($_GET['tuning'] ?? ''));
+    $sort = (string)($_GET['sort'] ?? 'updated_desc');
 
     $where = ['user_id = ?'];
-    $args  = [$userId];
+    $args = [$userId];
+
     if ($q !== '') {
         $where[] = '(title LIKE ? OR artist LIKE ?)';
         $args[]  = '%' . $q . '%';
         $args[]  = '%' . $q . '%';
     }
-    if ($key !== '')        { $where[] = 'original_key = ?'; $args[] = $key; }
-    if ($difficulty !== '') { $where[] = 'difficulty = ?';   $args[] = $difficulty; }
-    if ($genre !== '')      { $where[] = 'genre = ?';        $args[] = $genre; }
-    if ($tuning !== '')     { $where[] = 'tuning = ?';       $args[] = $tuning; }
+
+    if ($key !== '') { $where[] = 'original_key = ?'; $args[] = $key; }
+    if ($difficulty !== '') { $where[] = 'difficulty = ?'; $args[] = $difficulty; }
+    if ($genre !== '') { $where[] = 'genre = ?'; $args[] = $genre; }
+    if ($tuning !== '') { $where[] = 'tuning = ?'; $args[] = $tuning; }
 
     $orderBy = match ($sort) {
-        'title_asc'    => 'title ASC',
-        'artist_asc'   => 'artist ASC',
-        'updated_asc'  => 'updated_at ASC',
-        'difficulty'   => "FIELD(difficulty,'Beginner','Intermediate','Advanced')",
-        default        => 'updated_at DESC',
+        'title_asc' => 'title ASC',
+        'artist_asc' => 'artist ASC',
+        'updated_asc' => 'updated_at ASC',
+        'difficulty' => "FIELD(difficulty,'Beginner','Intermediate','Advanced')",
+        default => 'updated_at DESC',
     };
 
-    $sql  = 'SELECT id, user_id, title, artist, album, year, original_key, capo,
-                    tuning, tempo_bpm, difficulty, genre, strumming, is_public, updated_at
-             FROM songs WHERE ' . implode(' AND ', $where) . " ORDER BY $orderBy";
+    $sql = 'SELECT id, user_id, title, artist, album, year, original_key, capo,
+                   tuning, tempo_bpm, difficulty, genre, strumming, is_public, updated_at
+            FROM songs WHERE ' . implode(' AND ', $where) . " ORDER BY $orderBy";
     $stmt = $pdo->prepare($sql);
     $stmt->execute($args);
     $rows = array_map('song_to_array', $stmt->fetchAll());
 
-    // Attach tags
+    // attach tags
     foreach ($rows as &$row) {
         $row['tags'] = fetch_song_tags($pdo, $row['id']);
     }
@@ -287,23 +298,23 @@ function return_songs_list(PDO $pdo): void {
 
 function build_song_payload_from_body(array $b): array {
     return [
-        'title'        => trim((string)($b['title'] ?? '')),
-        'artist'       => trim((string)($b['artist'] ?? 'Unknown Artist')),
-        'album'        => isset($b['album']) ? trim((string)$b['album']) : null,
-        'year'         => isset($b['year']) && $b['year'] !== '' ? (int)$b['year'] : null,
+        'title' => trim((string)($b['title'] ?? '')),
+        'artist' => trim((string)($b['artist'] ?? 'Unknown Artist')),
+        'album' => isset($b['album']) ? trim((string)$b['album']) : null,
+        'year' => isset($b['year']) && $b['year'] !== '' ? (int)$b['year'] : null,
         'original_key' => trim((string)($b['original_key'] ?? 'C')),
-        'capo'         => clamp_int($b['capo'] ?? 0, 0, 12, 0),
-        'tuning'       => trim((string)($b['tuning'] ?? 'Standard')),
-        'tempo_bpm'    => clamp_int($b['tempo_bpm'] ?? 120, 40, 240, 120),
-        'difficulty'   => in_array(($b['difficulty'] ?? 'Intermediate'),
+        'capo' => clamp_int($b['capo'] ?? 0, 0, 12, 0),
+        'tuning' => trim((string)($b['tuning'] ?? 'Standard')),
+        'tempo_bpm' => clamp_int($b['tempo_bpm'] ?? 120, 40, 240, 120),
+        'difficulty' => in_array(($b['difficulty'] ?? 'Intermediate'),
                               ['Beginner','Intermediate','Advanced'], true)
                               ? $b['difficulty'] : 'Intermediate',
-        'genre'        => isset($b['genre']) ? trim((string)$b['genre']) : null,
-        'strumming'    => isset($b['strumming']) ? trim((string)$b['strumming']) : null,
-        'notes'        => isset($b['notes']) ? (string)$b['notes'] : null,
-        'body'         => (string)($b['body'] ?? ''),
-        'is_public'    => !empty($b['is_public']) ? 1 : 0,
-        'tags'         => is_array($b['tags'] ?? null) ? $b['tags'] : [],
+        'genre' => isset($b['genre']) ? trim((string)$b['genre']) : null,
+        'strumming' => isset($b['strumming']) ? trim((string)$b['strumming']) : null,
+        'notes' => isset($b['notes']) ? (string)$b['notes'] : null,
+        'body' => (string)($b['body'] ?? ''),
+        'is_public' => !empty($b['is_public']) ? 1 : 0,
+        'tags' => is_array($b['tags'] ?? null) ? $b['tags'] : [],
     ];
 }
 
@@ -311,7 +322,7 @@ function return_songs_create(PDO $pdo): void {
     $userId = require_auth();
     require_csrf();
     $body = json_body();
-    $p    = build_song_payload_from_body($body);
+    $p = build_song_payload_from_body($body);
     if ($p['title'] === '') json_response(['error' => 'Title is required'], 400);
 
     $stmt = $pdo->prepare(
@@ -320,31 +331,34 @@ function return_songs_create(PDO $pdo): void {
              tempo_bpm, difficulty, genre, strumming, notes, body, is_public)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)'
     );
+
     $stmt->execute([
         $userId, $p['title'], $p['artist'], $p['album'], $p['year'],
         $p['original_key'], $p['capo'], $p['tuning'], $p['tempo_bpm'],
         $p['difficulty'], $p['genre'], $p['strumming'], $p['notes'], $p['body'],
         $p['is_public'],
     ]);
+
     $songId = (int)$pdo->lastInsertId();
     set_song_tags($pdo, $songId, $p['tags']);
     return_song_get($pdo, $songId, 201);
 }
 
 function return_song_get(PDO $pdo, int $songId, int $code = 200): void {
-    // Owner can always read; everyone else can read only if is_public.
     $userId = (int)($_SESSION['user_id'] ?? 0);
     $stmt = $pdo->prepare('SELECT * FROM songs WHERE id = ?');
     $stmt->execute([$songId]);
     $row = $stmt->fetch();
+
     if (!$row) json_response(['error' => 'Not found'], 404);
     $isOwner  = ((int)$row['user_id'] === $userId && $userId > 0);
     $isPublic = (int)$row['is_public'] === 1;
+
     if (!$isOwner && !$isPublic) {
-        // Hide existence from non-owners on private songs
         if ($userId === 0) json_response(['error' => 'Unauthorized'], 401);
         json_response(['error' => 'Not found'], 404);
     }
+
     $row = song_to_array($row);
     $row['tags']      = fetch_song_tags($pdo, $songId);
     $row['is_owner']  = $isOwner;
@@ -360,7 +374,7 @@ function return_song_update(PDO $pdo, int $songId): void {
     if (!$stmt->fetch()) json_response(['error' => 'Not found'], 404);
 
     $body = json_body();
-    $p    = build_song_payload_from_body($body);
+    $p = build_song_payload_from_body($body);
     if ($p['title'] === '') json_response(['error' => 'Title is required'], 400);
 
     $upd = $pdo->prepare(
@@ -370,6 +384,7 @@ function return_song_update(PDO $pdo, int $songId): void {
             is_public=?
          WHERE id=? AND user_id=?'
     );
+
     $upd->execute([
         $p['title'], $p['artist'], $p['album'], $p['year'],
         $p['original_key'], $p['capo'], $p['tuning'], $p['tempo_bpm'],
@@ -377,6 +392,7 @@ function return_song_update(PDO $pdo, int $songId): void {
         $p['is_public'],
         $songId, $userId,
     ]);
+
     set_song_tags($pdo, $songId, $p['tags']);
     return_song_get($pdo, $songId);
 }
@@ -384,8 +400,10 @@ function return_song_update(PDO $pdo, int $songId): void {
 function return_song_delete(PDO $pdo, int $songId): void {
     $userId = require_auth();
     require_csrf();
+
     $stmt = $pdo->prepare('DELETE FROM songs WHERE id = ? AND user_id = ?');
     $stmt->execute([$songId, $userId]);
+
     if ($stmt->rowCount() === 0) json_response(['error' => 'Not found'], 404);
     json_response(['ok' => true]);
 }
@@ -397,14 +415,14 @@ function safe_filename(string $s): string {
 }
 
 function song_to_plain_text(array $song): string {
-    $lines  = [];
+    $lines = [];
     $lines[] = '# ' . $song['title'];
     $lines[] = 'Artist: ' . $song['artist'];
-    if (!empty($song['album']))  $lines[] = 'Album: '  . $song['album'];
-    if (!empty($song['year']))   $lines[] = 'Year: '   . $song['year'];
-    $lines[] = 'Key: '   . $song['original_key'];
+    if (!empty($song['album']))  $lines[] = 'Album: ' . $song['album'];
+    if (!empty($song['year']))   $lines[] = 'Year: ' . $song['year'];
+    $lines[] = 'Key: ' . $song['original_key'];
     $lines[] = 'Tuning: '. $song['tuning'];
-    $lines[] = 'Capo: '  . $song['capo'];
+    $lines[] = 'Capo: ' . $song['capo'];
     $lines[] = 'Tempo: ' . $song['tempo_bpm'] . ' BPM';
     if (!empty($song['strumming'])) $lines[] = 'Strumming: ' . $song['strumming'];
     $lines[] = '';
@@ -417,13 +435,16 @@ function return_song_export(PDO $pdo, int $songId, string $format): void {
     $stmt = $pdo->prepare('SELECT * FROM songs WHERE id = ?');
     $stmt->execute([$songId]);
     $row = $stmt->fetch();
+
     if (!$row) json_response(['error' => 'Not found'], 404);
     $isOwner  = ((int)$row['user_id'] === $userId && $userId > 0);
     $isPublic = (int)$row['is_public'] === 1;
+
     if (!$isOwner && !$isPublic) {
         if ($userId === 0) json_response(['error' => 'Unauthorized'], 401);
         json_response(['error' => 'Not found'], 404);
     }
+
     $row = song_to_array($row);
     $row['tags'] = fetch_song_tags($pdo, $songId);
 
@@ -435,7 +456,7 @@ function return_song_export(PDO $pdo, int $songId, string $format): void {
         echo song_to_plain_text($row);
         exit;
     }
-    // default: JSON
+
     header('Content-Type: application/json; charset=utf-8');
     header('Content-Disposition: attachment; filename="' . $base . '.json"');
     echo json_encode($row, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE);
@@ -447,6 +468,7 @@ function return_song_import(): void {
     if (!isset($_FILES['file']) || $_FILES['file']['error'] !== UPLOAD_ERR_OK) {
         json_response(['error' => 'Upload failed'], 400);
     }
+
     $tmp  = $_FILES['file']['tmp_name'];
     $name = $_FILES['file']['name'];
     $raw  = file_get_contents($tmp);
@@ -458,7 +480,6 @@ function return_song_import(): void {
         if (!is_array($data)) json_response(['error' => 'Invalid JSON'], 400);
         $payload = $data;
     } else {
-        // Treat as plain-text body. The user fills in metadata afterwards.
         $payload = [
             'title'  => pathinfo($name, PATHINFO_FILENAME),
             'artist' => 'Unknown Artist',
@@ -469,13 +490,14 @@ function return_song_import(): void {
     json_response(['parsed' => $payload]);
 }
 
-// ---------- Demo content ----------------------------------------------------
+// demo content
 
 function seed_demo_songs(PDO $pdo): void {
     $username = 'demo';
     $findUser = $pdo->prepare('SELECT id FROM users WHERE username = ?');
     $findUser->execute([$username]);
     $userId = (int)$findUser->fetchColumn();
+
     if ($userId <= 0) {
         $stmt = $pdo->prepare('INSERT INTO users (username, password_hash) VALUES (?, ?)');
         $stmt->execute([$username, password_hash(bin2hex(random_bytes(12)), PASSWORD_BCRYPT)]);
@@ -547,7 +569,7 @@ function seed_demo_songs(PDO $pdo): void {
     }
 }
 
-// ---------- Chord library --------------------------------------------------
+// chord library
 
 function migrate_chord_library_global(PDO $pdo): void {
     $dbName = (string)$pdo->query('SELECT DATABASE()')->fetchColumn();
@@ -555,6 +577,7 @@ function migrate_chord_library_global(PDO $pdo): void {
         'SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS
          WHERE TABLE_SCHEMA = ? AND TABLE_NAME = "chord_library" AND COLUMN_NAME = "user_id"'
     );
+
     $hasUserId->execute([$dbName]);
     if ((int)$hasUserId->fetchColumn() === 0) return;
 
@@ -563,6 +586,7 @@ function migrate_chord_library_global(PDO $pdo): void {
          WHERE TABLE_SCHEMA = ? AND TABLE_NAME = "chord_library"
            AND COLUMN_NAME = "user_id" AND REFERENCED_TABLE_NAME IS NOT NULL'
     );
+
     $fkStmt->execute([$dbName]);
     foreach ($fkStmt->fetchAll() as $fk) {
         $pdo->exec('ALTER TABLE chord_library DROP FOREIGN KEY `' . str_replace('`', '``', $fk['CONSTRAINT_NAME']) . '`');
@@ -572,6 +596,7 @@ function migrate_chord_library_global(PDO $pdo): void {
         'SELECT INDEX_NAME FROM INFORMATION_SCHEMA.STATISTICS
          WHERE TABLE_SCHEMA = ? AND TABLE_NAME = "chord_library" AND INDEX_NAME = "unique_shape"'
     );
+
     $idxStmt->execute([$dbName]);
     if ($idxStmt->fetchColumn()) {
         $pdo->exec('ALTER TABLE chord_library DROP INDEX unique_shape');
@@ -584,6 +609,7 @@ function migrate_chord_library_global(PDO $pdo): void {
           AND c1.variant = c2.variant
           AND c1.id > c2.id'
     );
+    
     $pdo->exec('ALTER TABLE chord_library DROP COLUMN user_id');
     $pdo->exec('ALTER TABLE chord_library ADD UNIQUE KEY unique_shape (chord_name, variant)');
 }
@@ -608,25 +634,25 @@ function shape_at_fret(array $offsets, int $fret): array {
 function seed_common_chords(PDO $pdo): void {
     $roots = ['C','C#','Db','D','D#','Eb','E','F','F#','Gb','G','G#','Ab','A','A#','Bb','B'];
     $templates = [
-        // E-string root barre shapes.
-        ['suffix' => '',     'open' => 'E', 'variant' => 1, 'offsets' => [0,2,2,1,0,0],  'barre' => true],
-        ['suffix' => 'm',    'open' => 'E', 'variant' => 1, 'offsets' => [0,2,2,0,0,0],  'barre' => true],
-        ['suffix' => '7',    'open' => 'E', 'variant' => 1, 'offsets' => [0,2,0,1,0,0],  'barre' => true],
-        ['suffix' => 'maj7', 'open' => 'E', 'variant' => 1, 'offsets' => [0,2,1,1,0,0],  'barre' => true],
-        ['suffix' => 'm7',   'open' => 'E', 'variant' => 1, 'offsets' => [0,2,0,0,0,0],  'barre' => true],
-        ['suffix' => 'sus4', 'open' => 'E', 'variant' => 1, 'offsets' => [0,2,2,2,0,0],  'barre' => true],
-        ['suffix' => '5',    'open' => 'E', 'variant' => 1, 'offsets' => [0,2,2,-1,-1,-1], 'barre' => false],
+        // E-string root barre shapes
+        ['suffix' => '', 'open' => 'E', 'variant' => 1, 'offsets' => [0,2,2,1,0,0], 'barre' => true],
+        ['suffix' => 'm', 'open' => 'E', 'variant' => 1, 'offsets' => [0,2,2,0,0,0], 'barre' => true],
+        ['suffix' => '7', 'open' => 'E', 'variant' => 1, 'offsets' => [0,2,0,1,0,0], 'barre' => true],
+        ['suffix' => 'maj7', 'open' => 'E', 'variant' => 1, 'offsets' => [0,2,1,1,0,0], 'barre' => true],
+        ['suffix' => 'm7', 'open' => 'E', 'variant' => 1, 'offsets' => [0,2,0,0,0,0], 'barre' => true],
+        ['suffix' => 'sus4', 'open' => 'E', 'variant' => 1, 'offsets' => [0,2,2,2,0,0], 'barre' => true],
+        ['suffix' => '5', 'open' => 'E', 'variant' => 1, 'offsets' => [0,2,2,-1,-1,-1], 'barre' => false],
 
-        // A-string root barre shapes.
-        ['suffix' => '',     'open' => 'A', 'variant' => 2, 'offsets' => [-1,0,2,2,2,0], 'barre' => true],
-        ['suffix' => 'm',    'open' => 'A', 'variant' => 2, 'offsets' => [-1,0,2,2,1,0], 'barre' => true],
-        ['suffix' => '7',    'open' => 'A', 'variant' => 2, 'offsets' => [-1,0,2,0,2,0], 'barre' => true],
+        // A-string root barre shapes
+        ['suffix' => '', 'open' => 'A', 'variant' => 2, 'offsets' => [-1,0,2,2,2,0], 'barre' => true],
+        ['suffix' => 'm', 'open' => 'A', 'variant' => 2, 'offsets' => [-1,0,2,2,1,0], 'barre' => true],
+        ['suffix' => '7', 'open' => 'A', 'variant' => 2, 'offsets' => [-1,0,2,0,2,0], 'barre' => true],
         ['suffix' => 'maj7', 'open' => 'A', 'variant' => 2, 'offsets' => [-1,0,2,1,2,0], 'barre' => true],
-        ['suffix' => 'm7',   'open' => 'A', 'variant' => 2, 'offsets' => [-1,0,2,0,1,0], 'barre' => true],
+        ['suffix' => 'm7', 'open' => 'A', 'variant' => 2, 'offsets' => [-1,0,2,0,1,0], 'barre' => true],
         ['suffix' => 'sus2', 'open' => 'A', 'variant' => 1, 'offsets' => [-1,0,2,2,0,0], 'barre' => true],
         ['suffix' => 'sus4', 'open' => 'A', 'variant' => 2, 'offsets' => [-1,0,2,2,3,0], 'barre' => true],
         ['suffix' => 'add9', 'open' => 'A', 'variant' => 1, 'offsets' => [-1,0,2,2,0,0], 'barre' => true],
-        ['suffix' => '5',    'open' => 'A', 'variant' => 2, 'offsets' => [-1,0,2,2,-1,-1], 'barre' => false],
+        ['suffix' => '5', 'open' => 'A', 'variant' => 2, 'offsets' => [-1,0,2,2,-1,-1], 'barre' => false],
     ];
 
     $exists = $pdo->prepare(
@@ -634,11 +660,13 @@ function seed_common_chords(PDO $pdo): void {
          WHERE chord_name = ? AND variant = ?
          LIMIT 1'
     );
+
     $insert = $pdo->prepare(
         'INSERT INTO chord_library
             (chord_name, variant, frets, fingers, barre_fret)
          VALUES (?, ?, ?, NULL, ?)'
     );
+
     $insertIfMissing = function (string $name, int $variant, string $frets, ?int $barre) use ($exists, $insert): void {
         $exists->execute([$name, $variant]);
         if ($exists->fetchColumn()) return;
@@ -648,12 +676,11 @@ function seed_common_chords(PDO $pdo): void {
     foreach ($roots as $root) {
         foreach ($templates as $t) {
             $fret = fret_for_root($t['open'], $root);
-            // Open-position shapes are already seeded by hand for many chords;
-            // skip generated barre variants at fret 0 to avoid odd-looking
-            // duplicate "barre at nut" diagrams.
+
             if ($fret === 0 && $t['barre']) continue;
             $frets = shape_at_fret($t['offsets'], $fret);
             $barre = $t['barre'] && $fret > 0 ? $fret : null;
+
             $insertIfMissing(
                 $root . $t['suffix'],
                 $t['variant'],
@@ -671,6 +698,7 @@ function seed_common_chords(PDO $pdo): void {
         ['F/A',  '-1,0,3,2,1,1'],
         ['E/G#', '4,2,2,1,0,0'],
     ];
+
     foreach ($slashChords as [$name, $frets]) {
         $insertIfMissing($name, 1, $frets, null);
     }
@@ -686,57 +714,57 @@ function handle_chords(?string $id, string $method): void {
              FROM chord_library
              ORDER BY chord_name, variant'
         );
+
         $rows = $stmt->fetchAll();
         foreach ($rows as &$r) {
-            $r['id']         = (int)$r['id'];
-            $r['variant']    = (int)$r['variant'];
+            $r['id'] = (int)$r['id'];
+            $r['variant'] = (int)$r['variant'];
             $r['barre_fret'] = $r['barre_fret'] !== null ? (int)$r['barre_fret'] : null;
-            $r['frets']      = array_map('intval', explode(',', $r['frets']));
-            $r['fingers']    = $r['fingers'] !== null
-                                ? array_map('intval', explode(',', $r['fingers']))
-                                : null;
+            $r['frets'] = array_map('intval', explode(',', $r['frets']));
+            $r['fingers'] = $r['fingers'] !== null ? array_map('intval', explode(',', $r['fingers'])) : null;
         }
         json_response(['chords' => $rows]);
     }
     json_response(['error' => 'Method not allowed'], 405);
 }
 
-// ---------- Public catalog -------------------------------------------------
-// Read-only listing of songs across all users that have is_public=1.
-// No authentication required — this is the public face of the site.
+// public catalog
 
 function handle_public(?string $id, ?string $action, string $method): void {
     if ($id !== 'songs' || $method !== 'GET') {
         json_response(['error' => 'Not found'], 404);
     }
+
     $pdo = get_pdo();
     seed_demo_songs($pdo);
 
-    $q          = trim((string)($_GET['q'] ?? ''));
-    $key        = trim((string)($_GET['key'] ?? ''));
+    $q = trim((string)($_GET['q'] ?? ''));
+    $key = trim((string)($_GET['key'] ?? ''));
     $difficulty = trim((string)($_GET['difficulty'] ?? ''));
-    $genre      = trim((string)($_GET['genre'] ?? ''));
-    $tuning     = trim((string)($_GET['tuning'] ?? ''));
-    $sort       = (string)($_GET['sort'] ?? 'updated_desc');
+    $genre = trim((string)($_GET['genre'] ?? ''));
+    $tuning = trim((string)($_GET['tuning'] ?? ''));
+    $sort = (string)($_GET['sort'] ?? 'updated_desc');
 
     $where = ['s.is_public = 1'];
-    $args  = [];
+    $args = [];
+
     if ($q !== '') {
         $where[] = '(s.title LIKE ? OR s.artist LIKE ?)';
         $args[]  = '%' . $q . '%';
         $args[]  = '%' . $q . '%';
     }
+
     if ($key !== '')        { $where[] = 's.original_key = ?'; $args[] = $key; }
     if ($difficulty !== '') { $where[] = 's.difficulty = ?';   $args[] = $difficulty; }
     if ($genre !== '')      { $where[] = 's.genre = ?';        $args[] = $genre; }
     if ($tuning !== '')     { $where[] = 's.tuning = ?';       $args[] = $tuning; }
 
     $orderBy = match ($sort) {
-        'title_asc'    => 's.title ASC',
-        'artist_asc'   => 's.artist ASC',
-        'updated_asc'  => 's.updated_at ASC',
-        'difficulty'   => "FIELD(s.difficulty,'Beginner','Intermediate','Advanced')",
-        default        => 's.updated_at DESC',
+        'title_asc' => 's.title ASC',
+        'artist_asc' => 's.artist ASC',
+        'updated_asc' => 's.updated_at ASC',
+        'difficulty' => "FIELD(s.difficulty,'Beginner','Intermediate','Advanced')",
+        default => 's.updated_at DESC',
     };
 
     $sql = 'SELECT s.id, s.user_id, s.title, s.artist, s.album, s.year,
@@ -746,12 +774,14 @@ function handle_public(?string $id, ?string $action, string $method): void {
             FROM songs s
             JOIN users u ON u.id = s.user_id
             WHERE ' . implode(' AND ', $where) . " ORDER BY $orderBy LIMIT 200";
+
     $stmt = $pdo->prepare($sql);
     $stmt->execute($args);
     $rows = array_map(function ($r) {
         $r = song_to_array($r);
         return $r;
     }, $stmt->fetchAll());
+    
     foreach ($rows as &$row) {
         $row['tags'] = fetch_song_tags($pdo, $row['id']);
     }

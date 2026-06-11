@@ -1,6 +1,3 @@
--- ASCII Chords — schema + seed data
--- Auto-loaded by mysql:8.0 entrypoint when the data volume is empty.
-
 CREATE DATABASE IF NOT EXISTS ascii_chords_db
   DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 USE ascii_chords_db;
@@ -63,12 +60,6 @@ CREATE TABLE IF NOT EXISTS song_tags (
     FOREIGN KEY (tag_id)  REFERENCES tags(id)  ON DELETE CASCADE
 ) ENGINE=InnoDB;
 
--- ---------------------------------------------------------------------------
--- Seed: built-in global chord shapes
--- frets / fingers stored low-to-high: E A D G B e
--- (the renderer flips order if it expects high-to-low)
--- -1 = muted, 0 = open
--- ---------------------------------------------------------------------------
 
 INSERT IGNORE INTO chord_library (chord_name, variant, frets, fingers, barre_fret) VALUES
 ('C',   1, '-1,3,2,0,1,0',  '0,3,2,0,1,0', NULL),
@@ -101,16 +92,13 @@ INSERT IGNORE INTO chord_library (chord_name, variant, frets, fingers, barre_fre
 ('A5',  1, '-1,0,2,2,-1,-1','0,0,1,2,0,0', NULL),
 ('D5',  1, '-1,-1,0,2,3,-1','0,0,0,1,3,0', NULL);
 
--- A handful of common tags
+
 INSERT IGNORE INTO tags (name) VALUES
 ('classic-rock'), ('blues'), ('folk'), ('acoustic'),
 ('fingerpicking'), ('beginner'), ('strumming'), ('pop');
 
--- ---------------------------------------------------------------------------
--- Idempotent migration for installs created before is_public was introduced.
--- Wrapped in a procedure so it is safe to run on a brand-new schema too:
--- INFORMATION_SCHEMA tells us whether the column already exists.
--- ---------------------------------------------------------------------------
+
+-- old migration code
 DROP PROCEDURE IF EXISTS add_is_public_if_missing;
 DELIMITER //
 CREATE PROCEDURE add_is_public_if_missing()

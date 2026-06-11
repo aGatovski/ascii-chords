@@ -1,7 +1,3 @@
-/* ============================================================
-   autoscroll.js — requestAnimationFrame-based smooth scroller
-   ============================================================ */
-
 window.Autoscroll = (function () {
   'use strict';
 
@@ -14,6 +10,7 @@ window.Autoscroll = (function () {
   function step() {
     if (!scrolling || !containerEl) return;
     containerEl.scrollTop += speed;
+    
     if (containerEl.scrollTop + containerEl.clientHeight < containerEl.scrollHeight - 1) {
       rafId = requestAnimationFrame(step);
     } else {
@@ -29,7 +26,6 @@ window.Autoscroll = (function () {
 
     if (!pauseOnInteractionHandler) {
       pauseOnInteractionHandler = () => toggle(containerEl, speed);
-      // Note: a simple click toggles; we attach once per element.
     }
 
     rafId = requestAnimationFrame(step);
