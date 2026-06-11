@@ -3,12 +3,15 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ASCII Chords — Login</title>
-  <link rel="stylesheet" href="style.css" />
+  <title>ASCII Chords – Login</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Source+Sans+3:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css?v=20260610-light" />
 </head>
 <body class="auth-body">
   <main class="auth-card">
-    <h1>🎸 ASCII Chords</h1>
+    <h1>ASCII Chords</h1>
     <p class="muted">Sign in or create an account to manage your songs.</p>
 
     <div class="tabs">
@@ -51,6 +54,7 @@
     const tabs = document.querySelectorAll('.tab-btn');
     const loginForm = document.getElementById('login-form');
     const registerForm = document.getElementById('register-form');
+
     tabs.forEach(b => b.addEventListener('click', () => {
       tabs.forEach(x => x.classList.toggle('active', x === b));
       const which = b.dataset.tab;
@@ -69,6 +73,7 @@
       errEl.textContent = '';
       const fd = new FormData(form);
       const csrf = await getCsrf();
+
       try {
         const r = await fetch('/api/auth/' + action, {
           method: 'POST',

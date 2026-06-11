@@ -3,7 +3,7 @@
 A lightweight, web-based platform for guitarists: write songs with chord-above-lyric notation
 and ASCII tab blocks, get live preview, audio playback (Web Audio API), autoscroll,
 transposition, and a personal song library. All vanilla HTML/CSS/JS + PHP 8.x + MySQL 8.0
-in Docker — no frameworks.
+in Docker – no frameworks.
 
 ---
 
@@ -87,7 +87,7 @@ the `X-CSRF-Token` header (token from `GET /api/csrf`).
 | GET | `/api/me`   | `{ user }` or `{ user: null }` |
 | POST | `/api/auth/register` | `{ username, password }` |
 | POST | `/api/auth/login` | `{ username, password }` |
-| POST | `/api/auth/logout` | — |
+| POST | `/api/auth/logout` | – |
 | GET | `/api/songs` | Query: `q, key, difficulty, genre, tuning, sort` |
 | POST | `/api/songs` | Create |
 | GET | `/api/songs/{id}` | Read |
@@ -139,7 +139,7 @@ E|--x--x--x--x--|
 
 ## Known limits
 
-- The audio engine uses simple sawtooth oscillators with an envelope — it is
+- The audio engine uses simple sawtooth oscillators with an envelope – it is
   closer to a synth than a real guitar. The hookup for the strumming pattern
   is in `player.js::scheduleChordLine`; expand if you want a richer voicing.
 - Real-time autoscroll/playback sync is approximate (visual pulse only).

@@ -4,12 +4,15 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>ASCII Chords</title>
-  <link rel="stylesheet" href="style.css?v=20260609-tab-bar" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Source+Sans+3:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css?v=20260610-light" />
 </head>
 <body>
   <header class="topbar no-print">
     <div class="brand">
-      <a href="#library">🎸 ASCII Chords</a>
+      <a href="#library">ASCII Chords</a>
     </div>
     <nav>
       <a href="#library" data-auth-only>Library</a>
@@ -27,23 +30,20 @@
 
   <main id="view-root" class="container"></main>
 
-  <!-- Hidden popover host -->
   <div id="chord-popover" class="popover hidden"></div>
 
-  <!-- Toast host -->
   <div id="toast" class="toast hidden"></div>
 
-  <!-- Tab editor modal -->
   <div id="tab-editor-modal" class="modal-backdrop hidden">
     <div class="modal">
       <header class="modal-header">
-        <h3>📐 Tab editor</h3>
-        <button id="tab-editor-close" class="link-btn">close</button>
+        <h3>Tab editor</h3>
+        <button id="tab-editor-close" class="link-btn">Close</button>
       </header>
       <p class="muted">
         Click a cell and type a fret number (0–24), <code>x</code> for muted,
         or leave it blank. Strings are labelled high-e on top, low-E on the
-        bottom — same as written tab.
+        bottom – same as written tab.
       </p>
       <div id="tab-editor-grid" class="tab-grid"></div>
       <pre id="tab-editor-preview" class="tab-grid-preview"></pre>
@@ -54,7 +54,6 @@
     </div>
   </div>
 
-  <!-- Templates -->
   <template id="tpl-library">
     <section class="library-view">
       <header class="library-header">
@@ -74,7 +73,7 @@
             <option value="artist_asc">Artist A–Z</option>
             <option value="difficulty">By difficulty</option>
           </select>
-          <button id="import-btn" type="button">⬆ Import</button>
+          <button id="import-btn" type="button">Import</button>
           <input type="file" id="import-file" accept=".json,.txt" hidden />
           <a class="primary" href="#song/new">+ New song</a>
         </div>
@@ -130,49 +129,65 @@
 
       <footer class="editor-toolbar">
         <div class="toolbar-row">
-          <button id="play-btn"  class="primary">▶ Play</button>
-          <button id="pause-btn">⏸ Pause</button>
-          <button id="stop-btn">⏹ Stop</button>
-          <label>BPM <input type="range" id="bpm-slider" min="40" max="240" value="120" /></label>
-          <input type="number" id="bpm-display" min="40" max="240" value="120" />
-          <label><input type="checkbox" id="metronome-toggle" /> Metronome</label>
-          <label>Playback
-            <select id="playback-mode">
-              <option value="all">Tabs + chords</option>
-              <option value="tabs">Tabs only</option>
-              <option value="chords">Chords only</option>
-            </select>
-          </label>
-          <label>Instrument
-            <select id="instrument-select">
-              <option value="synth">Synth</option>
-              <option value="acoustic" selected>Acoustic</option>
-              <option value="acoustic-tonejs">Acoustic (Tone.js)</option>
-              <option value="electric">Electric</option>
-            </select>
-          </label>
-          <span id="player-status" class="player-status">Acoustic selected</span>
+          <div class="toolbar-group">
+            <span class="toolbar-label">Playback</span>
+            <button id="play-btn" class="primary">Play</button>
+            <button id="pause-btn">Pause</button>
+            <button id="stop-btn">Stop</button>
+          </div>
+          <div class="toolbar-group">
+            <label>BPM <input type="range" id="bpm-slider" min="40" max="240" value="120" /></label>
+            <input type="number" id="bpm-display" min="40" max="240" value="120" />
+            <label><input type="checkbox" id="metronome-toggle" /> Metronome</label>
+          </div>
+          <div class="toolbar-group">
+            <label>Playback
+              <select id="playback-mode">
+                <option value="all">Tabs + chords</option>
+                <option value="tabs">Tabs only</option>
+                <option value="chords">Chords only</option>
+              </select>
+            </label>
+            <label>Instrument
+              <select id="instrument-select">
+                <option value="synth">Synth</option>
+                <option value="acoustic" selected>Acoustic</option>
+                <option value="acoustic-tonejs">Acoustic (Tone.js)</option>
+                <option value="electric">Electric</option>
+              </select>
+            </label>
+            <span id="player-status" class="player-status">Acoustic selected</span>
+          </div>
         </div>
         <div class="toolbar-row">
-          <button id="autoscroll-btn">↕ Autoscroll</button>
-          <label>Speed <input type="range" id="autoscroll-speed" min="0.1" max="3.0" value="0.5" step="0.1" /></label>
-          <span id="autoscroll-display">0.5×</span>
-          <button id="transpose-down">– Transpose</button>
-          <button id="transpose-up">Transpose +</button>
-          <select id="accidental-select">
-            <option value="sharp">♯ sharps</option>
-            <option value="flat">♭ flats</option>
-          </select>
-          <span class="muted" id="capo-info"></span>
+          <div class="toolbar-group">
+            <span class="toolbar-label">Scroll</span>
+            <button id="autoscroll-btn">Autoscroll</button>
+            <label>Speed <input type="range" id="autoscroll-speed" min="0.1" max="3.0" value="0.5" step="0.1" /></label>
+            <span id="autoscroll-display">0.5x</span>
+          </div>
+          <div class="toolbar-group">
+            <span class="toolbar-label">Transpose</span>
+            <button id="transpose-down">Transpose down</button>
+            <button id="transpose-up">Transpose up</button>
+            <select id="accidental-select">
+              <option value="sharp">Sharps</option>
+              <option value="flat">Flats</option>
+            </select>
+            <span class="muted" id="capo-info"></span>
+          </div>
         </div>
         <div class="toolbar-row">
-          <button id="tab-editor-btn">📐 Insert tab</button>
-          <button id="save-btn"   class="primary">💾 Save</button>
-          <button id="export-json-btn">⬇ Export JSON</button>
-          <button id="export-txt-btn">⬇ Export TXT</button>
-          <button id="print-btn">🖨 Print</button>
-          <button id="delete-btn" class="danger">🗑 Delete</button>
-          <span class="muted" id="save-status"></span>
+          <div class="toolbar-group">
+            <span class="toolbar-label">Actions</span>
+            <button id="tab-editor-btn">Insert tab</button>
+            <button id="save-btn" class="primary">Save</button>
+            <button id="export-json-btn">Export JSON</button>
+            <button id="export-txt-btn">Export TXT</button>
+            <button id="print-btn">Print</button>
+            <button id="delete-btn" class="danger">Delete</button>
+            <span class="muted" id="save-status"></span>
+          </div>
         </div>
       </footer>
       <div id="chord-validation" class="chord-validation hidden"></div>
@@ -234,7 +249,7 @@
       <p>Songs in ASCII Chords are written as plain text. The parser recognises four
          kinds of lines, decided by what the line looks like.</p>
 
-      <h3>1. Section headings — <code>[Verse]</code></h3>
+      <h3>1. Section headings – <code>[Verse]</code></h3>
       <p>Wrap a label in square brackets to mark a new section. It will render as a
          coloured heading. Common labels: <code>[Intro]</code>, <code>[Verse]</code>,
          <code>[Chorus]</code>, <code>[Bridge]</code>, <code>[Outro]</code>.</p>
@@ -271,7 +286,7 @@ E|--x--x--x--x--|</pre>
       <p>The chord popover renders fingerings as a small ASCII grid. Strings are
          shown <strong>high e on the left, low E on the right</strong>; frets run from
          top to bottom (lowest fret first). The status row above the grid shows
-         <code>✕</code> for muted, <code>○</code> for open, and a space for fretted.</p>
+         <code>x</code> for muted, <code>o</code> for open, and a space for fretted.</p>
 
       <h3>Tunings</h3>
       <p>Set the song's tuning (Standard, Drop D, Open G, Open D, DADGAD, Half-Step
@@ -281,9 +296,9 @@ E|--x--x--x--x--|</pre>
       <h3>Playback model</h3>
       <p>The Play button schedules audio in two ways:</p>
       <ul>
-        <li><strong>Tab blocks</strong> — every column becomes an instant in
+        <li><strong>Tab blocks</strong> – every column becomes an instant in
           time, so frets sound exactly when written. This is the precise path.</li>
-        <li><strong>Chord lines</strong> — every chord token gets one beat and
+        <li><strong>Chord lines</strong> – every chord token gets one beat and
           plays as a downstrum using the first variant in the chord library.
           Tokens with no shape in the library are skipped silently.</li>
       </ul>
@@ -291,13 +306,13 @@ E|--x--x--x--x--|</pre>
          playback is a sketch, not a performance.</p>
 
       <h3>Capo &amp; transposition</h3>
-      <p>Capo is informational — it tells the parser what fret to assume for the
+      <p>Capo is informational – it tells the parser what fret to assume for the
          <em>shape</em> you wrote. Transposition (<code>+ Transpose</code> /
          <code>– Transpose</code>) actually rewrites every chord and every fret
          number in tab blocks to a new key.</p>
 
       <h3>Saving private vs. public</h3>
-      <p>By default every song is private — only you can see it. Tick
+      <p>By default every song is private – only you can see it. Tick
          <strong>Make this song public</strong> in the metadata grid to share it in
          the public catalog (anyone can read, but only you can edit or delete).</p>
     </section>
