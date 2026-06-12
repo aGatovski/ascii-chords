@@ -720,6 +720,17 @@ body.guest-mode [data-guest-only] { display: inline-flex; }
   margin-top: 1rem;
 }
 
+.tab-editor-options {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-top: 0.6rem;
+}
+.tab-editor-options label {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+}
 .tab-grid {
   background: var(--panel-2);
   border: 1px solid var(--border);

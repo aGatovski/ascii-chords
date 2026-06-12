@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Source+Sans+3:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
-  <link rel="stylesheet" href="style.css?v=20260610-light" />
+  <link rel="stylesheet" href="style.css?v=20260612-tab-length" />
 </head>
 <body>
   <header class="topbar no-print">
@@ -45,6 +45,16 @@
         or leave it blank. Strings are labelled high-e on top, low-E on the
         bottom – same as written tab.
       </p>
+      <div class="tab-editor-options">
+        <label>Length
+          <select id="tab-editor-length">
+            <option value="1">1 beat</option>
+            <option value="2">2 beats</option>
+            <option value="4" selected>1 bar / 4 beats</option>
+            <option value="8">2 bars / 8 beats</option>
+          </select>
+        </label>
+      </div>
       <div id="tab-editor-grid" class="tab-grid"></div>
       <pre id="tab-editor-preview" class="tab-grid-preview"></pre>
       <div class="modal-actions">
@@ -318,9 +328,9 @@ E|--x--x--x--x--|</pre>
     </section>
   </template>
 
-  <script src="chords.js?v=20260609-tab-bar"></script>
-  <script src="player.js?v=20260609-tab-bar"></script>
-  <script src="autoscroll.js?v=20260609-tab-bar"></script>
-  <script src="app.js?v=20260609-tab-bar"></script>
+  <script src="chords.js?v=20260612-tab-length"></script>
+  <script src="player.js?v=20260612-tab-length"></script>
+  <script src="autoscroll.js?v=20260612-tab-length"></script>
+  <script src="app.js?v=20260612-tab-length"></script>
 </body>
 </html>
