@@ -271,7 +271,7 @@ window.Player = (function () {
         if (playbackMode === 'all' || playbackMode === 'tabs') {
           cursor = scheduleTabBlock(audioCtx, block, beatInterval, cursor);
         } else {
-          cursor += Math.max(1, Math.max(...block.map(l => countTabSteps(tabBody(l))))) * beatInterval / 4;
+          cursor += countTabBlockSteps(block) * beatInterval / 4;
         }
       } else if (line.trim() === '') {
         cursor += beatInterval * 0.5;
@@ -336,26 +336,21 @@ window.Player = (function () {
     });
 
     const bodies = blockLines.map(tabBody);
-    const maxLen = Math.max(...bodies.map(b => b.length));
+    const positions = tabStepPositions(bodies);
 
     let time = startTime;
-    let col = 0;
-
-    while (col < maxLen) {
-      let stepWidth = 1;
+    for (const pos of positions) {
       for (let s = 0; s < bodies.length; s++) {
         const body = bodies[s];
-        if (col >= body.length) continue;
-        const m = body.substring(col).match(/^(\d{1,2})/);
+        if (pos.start >= body.length) continue;
+        const m = body.substring(pos.start, pos.start + pos.width).match(/^(\d{1,2})/);
 
         if (m) {
           const fret = parseInt(m[1], 10);
           playNote(audioCtx, letters[s], fret, time, 0.2);
-          stepWidth = Math.max(stepWidth, m[1].length);
         }
       }
 
-      col += stepWidth;
       time += beatInterval / 4;
     }
 
@@ -373,15 +368,54 @@ window.Player = (function () {
     return line.replace(/^\s*[eEBGDAd]\|/, '').replace(/\|\s*$/, '');
   }
 
-  function countTabSteps(body) {
+  function countTabBlockSteps(blockLines) {
+    return Math.max(1, tabStepPositions(blockLines.map(tabBody)).length);
+  }
+
+  function tabStepPositions(bodies) {
+    const separated = separatedTabStepPositions(bodies);
+    if (separated) return separated;
+
+    const maxLen = Math.max(...bodies.map(b => b.length));
+    const positions = [];
     let col = 0;
-    let steps = 0;
-    while (col < body.length) {
-      const m = body.substring(col).match(/^(\d{1,2})/);
-      col += m ? m[1].length : 1;
-      steps++;
+    while (col < maxLen) {
+      let width = 1;
+      for (const body of bodies) {
+        const m = body.substring(col).match(/^(\d{1,2})/);
+        if (m) width = Math.max(width, m[1].length);
+      }
+      positions.push({ start: col, width });
+      col += width;
     }
-    return steps;
+    return positions;
+  }
+
+  function separatedTabStepPositions(bodies) {
+    if (!bodies.length) return null;
+
+    const maxLen = Math.max(...bodies.map(b => b.length));
+    if (maxLen < 3) return null;
+    if (!bodies.every(b => b.length === maxLen && b[0] === '-' && b[maxLen - 1] === '-')) {
+      return null;
+    }
+
+    const positions = [];
+    let col = 0;
+    while (col < maxLen - 1) {
+      if (!bodies.every(b => b[col] === '-')) return null;
+
+      const start = col + 1;
+      let width = 1;
+      for (const body of bodies) {
+        if (/^\d{2}/.test(body.substring(start))) width = 2;
+      }
+      if (start + width > maxLen) return null;
+      positions.push({ start, width });
+      col = start + width;
+    }
+
+    return col === maxLen - 1 ? positions : null;
   }
 
   // visual beat pulse

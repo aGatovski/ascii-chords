@@ -773,26 +773,20 @@
 
   // tab editor modal
   const TAB_STRINGS = ['e', 'B', 'G', 'D', 'A', 'E'];
-  const TAB_BEATS_PER_BAR = 4;
   const TAB_STEPS_PER_BEAT = 4;
-  let tabCols = TAB_BEATS_PER_BAR * TAB_STEPS_PER_BEAT;
+  let tabBeats = 4;
+  let tabCols = tabBeats * TAB_STEPS_PER_BEAT;
   let tabState = null;
 
-  function currentTabEditorBpm() {
-    const bpmField = document.getElementById('meta-bpm');
-    const n = parseInt(bpmField && bpmField.value, 10);
-    return Math.max(40, Math.min(240, isNaN(n) ? 120 : n));
+  function selectedTabBeats() {
+    const lengthSel = document.getElementById('tab-editor-length');
+    const n = parseInt(lengthSel && lengthSel.value, 10);
+    return [1, 2, 4, 8].includes(n) ? n : 4;
   }
 
-  function tabColumnsForBpm(songBpm) {
-    const secondsPerBeat = 60 / songBpm;
-    const barSeconds = secondsPerBeat * TAB_BEATS_PER_BAR;
-    const stepSeconds = secondsPerBeat / TAB_STEPS_PER_BEAT;
-    return Math.max(TAB_BEATS_PER_BAR, Math.round(barSeconds / stepSeconds));
-  }
-
-  function ensureTabStateForCurrentBar() {
-    const nextCols = tabColumnsForBpm(currentTabEditorBpm());
+  function ensureTabStateForCurrentLength() {
+    tabBeats = selectedTabBeats();
+    const nextCols = tabBeats * TAB_STEPS_PER_BEAT;
 
     if (!tabState) {
       tabCols = nextCols;
@@ -811,7 +805,9 @@
     const modal = document.getElementById('tab-editor-modal');
     if (!modal) return;
 
-    ensureTabStateForCurrentBar();
+    const lengthSel = document.getElementById('tab-editor-length');
+    if (lengthSel) lengthSel.value = String(tabBeats);
+    ensureTabStateForCurrentLength();
     renderTabGrid();
     modal.classList.remove('hidden');
 
@@ -900,9 +896,9 @@
         const w = colWidths[c];
         const v = tabState[r][c];
         const cell = v === '' ? '-'.repeat(w) : v.padStart(w, '-');
-        line += cell;
+        line += '-' + cell;
       }
-      line += '|';
+      line += '-|';
       lines.push(line);
     }
     return lines.join('\n');
@@ -913,7 +909,7 @@
   }
 
   function clearTabState() {
-    ensureTabStateForCurrentBar();
+    ensureTabStateForCurrentLength();
     tabState = TAB_STRINGS.map(() => Array(tabCols).fill(''));
     renderTabGrid();
   }
@@ -945,11 +941,18 @@
     const closeBtn = document.getElementById('tab-editor-close');
     const clearBtn = document.getElementById('tab-editor-clear');
     const insertBtn = document.getElementById('tab-editor-insert');
+    const lengthSel = document.getElementById('tab-editor-length');
     const backdrop = document.getElementById('tab-editor-modal');
 
     if (closeBtn) closeBtn.addEventListener('click', closeTabEditor);
     if (clearBtn) clearBtn.addEventListener('click', clearTabState);
     if (insertBtn) insertBtn.addEventListener('click', insertTabAtCursor);
+    if (lengthSel) {
+      lengthSel.addEventListener('change', () => {
+        ensureTabStateForCurrentLength();
+        renderTabGrid();
+      });
+    }
     if (backdrop) {
       backdrop.classList.add('hidden');
       backdrop.addEventListener('click', (e) => {
