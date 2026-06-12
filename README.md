@@ -1,4 +1,4 @@
-# 🎸 ASCII Chords
+# ASCII Chords
 
 A lightweight, web-based platform for guitarists: write songs with chord-above-lyric notation
 and ASCII tab blocks, get live preview, audio playback (Web Audio API), autoscroll,
@@ -12,7 +12,6 @@ in Docker – no frameworks.
 Requires **Docker** and **docker-compose**.
 
 ```bash
-cd ascii-chords
 docker-compose up --build
 ```
 
@@ -62,11 +61,11 @@ ascii-chords/
 | 1 | Visit `/login.html`, register | Redirects to library |
 | 2 | Create new song with chords + lyrics | Preview pane shows chord row above lyrics |
 | 3 | Click a chord token | Popover with diagram + notes |
-| 4 | Click ▶ Play at 120 BPM | Notes synthesise; preview pulses with beat |
+| 4 | Click  Play at 120 BPM | Notes synthesise; preview pulses with beat |
 | 5 | Drag BPM slider | Tempo changes in real time |
 | 6 | Toggle Autoscroll | Smooth scroll, click again to pause |
 | 7 | Transpose +2 | Chord names shift up 2 semitones; tab frets adjust |
-| 8 | Switch ♯ ↔ ♭ | Chord display switches accidentals |
+| 8 | Switch  | Chord display switches accidentals |
 | 9 | Save | Toast "Saved", URL updates if new song |
 | 10 | Export JSON / TXT | Browser downloads correctly named file |
 | 11 | Print | Only song body prints, no UI chrome |
@@ -103,8 +102,8 @@ the `X-CSRF-Token` header (token from `GET /api/csrf`).
 
 Inside the song body, the parser recognises:
 
-- **`[Section]`** lines (`[Verse]`, `[Chorus]`, …) → styled headings
-- **Chord lines** (`Am  F  C  G`) → tokenised, rendered above the next line
+- **`[Section]`** lines (`[Verse]`, `[Chorus]`, …) styled headings
+- **Chord lines** (`Am  F  C  G`) tokenised, rendered above the next line
 - **Tab blocks** (lines starting with `e|`, `B|`, `G|`, `D|`, `A|`, `E|`)
 - **Lyric lines** (everything else)
 - **Empty lines** → paragraph breaks
@@ -125,22 +124,3 @@ A|--3--3--3--3--|
 E|--x--x--x--x--|
 ```
 
----
-
-## Security notes
-
-- Passwords hashed with `password_hash($p, PASSWORD_BCRYPT)`
-- SQL via PDO prepared statements only
-- HTML output escaped (server-side responses are JSON; client renders via `escapeHtml`)
-- CSRF token required on all POST/PUT/DELETE
-- `session_regenerate_id(true)` on login/register; `SameSite=Lax`, `HttpOnly` cookies
-
----
-
-## Known limits
-
-- The audio engine uses simple sawtooth oscillators with an envelope – it is
-  closer to a synth than a real guitar. The hookup for the strumming pattern
-  is in `player.js::scheduleChordLine`; expand if you want a richer voicing.
-- Real-time autoscroll/playback sync is approximate (visual pulse only).
-- No real-time collaboration; single-user editing per session.
